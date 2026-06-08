@@ -167,7 +167,7 @@ export default function PaymentsPage() {
 
       const response = await api.post("/invoices/pay-offline", payload);
       setSuccessMsg(response.data.message || "Pembayaran tunai SPP offline berhasil diproses");
-      setReceiptData(response.data.data);
+      setReceiptData(response.data.data.invoice);
       
       // Keep student details but reset lookup query to allow further logging
       // setNisQuery("");
