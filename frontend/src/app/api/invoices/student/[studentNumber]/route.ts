@@ -21,6 +21,10 @@ export async function GET(
 
     const student = await prisma.student.findUnique({
       where: { studentNumber },
+      include: {
+        schoolUnit: { select: { name: true } },
+        parent: { select: { name: true, email: true } },
+      },
     });
 
     if (!student) {
@@ -89,6 +93,7 @@ export async function GET(
       success: true,
       message: "Daftar invoice SPP siswa berhasil diambil",
       data: invoices,
+      student,
     });
   } catch (error) {
     console.error("[INVOICES STUDENT GET]", error);

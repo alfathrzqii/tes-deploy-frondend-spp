@@ -112,13 +112,8 @@ export default function CekTagihanPage() {
       if (response.data.success && response.data.data.length > 0) {
         setInvoices(response.data.data);
         
-        // 2. Fetch student profile to get parent detail & school unit name
-        // We can search for the student in the list of students or use standard get
-        // Since we don't have a direct public student lookup endpoint, let's fetch students list and filter by NIS
-        const studentsResponse = await api.get(`/students?search=${studentNumber.trim()}`);
-        const foundStudent = studentsResponse.data.data.find(
-          (s: any) => s.studentNumber.toLowerCase() === studentNumber.trim().toLowerCase()
-        );
+        // Use student profile returned directly from the public invoices endpoint
+        const foundStudent = response.data.student;
 
         if (foundStudent) {
           setStudent(foundStudent);
