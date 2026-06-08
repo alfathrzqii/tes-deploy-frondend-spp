@@ -1,0 +1,29 @@
+# Dependencies
+**/node_modules/
+node_modules/
+
+# Production/Build outputs
+**/dist/
+**/.next/
+dist/
+.next/
+
+# Environments and Secrets
+**/.env
+**/.env.local
+.env
+.env.local
+
+# Databases
+**/prisma/*.db
+**/prisma/*.db-journal
+**/dev.db
+**/dev.db-journal
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+
+# Temporary/System files
+.DS_Store
+Thumbs.db
+*.zip
+*.log
