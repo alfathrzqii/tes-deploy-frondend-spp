@@ -12,14 +12,12 @@ import { loginSchema } from "../schemas/authSchema.js";
 const authRoutes = Router();
 
 const userRepo = new PrismaUserRepository();
-const loginUseCase = new LoginUseCase(userRepo);
 const passwordHasher = new PasswordHasher();
+const loginUseCase = new LoginUseCase(userRepo, passwordHasher);
 const tokenService = new TokenService();
 const authController = new AuthController(loginUseCase, passwordHasher, tokenService, userRepo);
 
 authRoutes.post("/login", validateRequest(loginSchema), (req, res, next) => authController.login(req, res, next));
 authRoutes.get("/me", authMiddleware, (req, res, next) => authController.getMe(req, res, next));
-authRoutes.post("/logout", (req, res, next) => authController.logout(req, res, next));
 
 export default authRoutes;
-

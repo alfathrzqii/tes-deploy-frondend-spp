@@ -1,6 +1,7 @@
 import type { ICategoryRepository } from "../../domain/repositories/ICategoryRepository.js";
 import { Category } from "../../domain/entities/Category.js";
 import type { CategoryType } from "@prisma/client";
+import { NotFoundError } from "../../domain/errors/AppError.js";
 
 export class UpdateCategoryUseCase {
   constructor(private categoryRepository: ICategoryRepository) {}
@@ -16,7 +17,7 @@ export class UpdateCategoryUseCase {
     const category = await this.categoryRepository.findById(id);
 
     if (!category) {
-      throw new Error("Kategori tidak ditemukan");
+      throw new NotFoundError("Kategori tidak ditemukan");
     }
 
     return await this.categoryRepository.update(id, data);

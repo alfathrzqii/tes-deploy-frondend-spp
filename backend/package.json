@@ -2,11 +2,14 @@
   "name": "spp-backend",
   "version": "1.0.0",
   "type": "module",
-  "main": "dist/main/server.js",
+  "main": "index.js",
   "scripts": {
     "dev": "tsx src/main/server.ts",
     "build": "tsc",
-    "start": "node dist/main/server.js"
+    "start": "node dist/main/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "prisma": {
     "seed": "node --loader ts-node/esm prisma/seed.ts"
@@ -14,17 +17,22 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "Backend API for School SPP Management System",
+  "description": "",
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
-    "@types/node": "^25.9.1",
+    "@types/node": "^25.9.4",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.9",
+    "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.22.3",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "vitest-mock-extended": "^4.0.0"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

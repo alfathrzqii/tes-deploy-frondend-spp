@@ -1,4 +1,5 @@
 import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
+import { NotFoundError } from "../../domain/errors/AppError.js";
 
 export class DeleteSppTariffUseCase {
   constructor(private sppTariffRepository: ISppTariffRepository) {}
@@ -7,7 +8,7 @@ export class DeleteSppTariffUseCase {
     const existing = await this.sppTariffRepository.findById(id);
 
     if (!existing) {
-      throw new Error("Tarif SPP tidak ditemukan");
+      throw new NotFoundError("Tarif SPP tidak ditemukan");
     }
 
     await this.sppTariffRepository.delete(id);

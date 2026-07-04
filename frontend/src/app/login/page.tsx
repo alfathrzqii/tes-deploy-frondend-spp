@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { KeyRound, Mail, AlertCircle, Eye, EyeOff } from "lucide-react";
+import ThemeToggle from "@/components/ThemeToggle";
 
 function LoginForm() {
   const router = useRouter();
@@ -50,6 +51,11 @@ function LoginForm() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-slate-950 overflow-hidden px-4">
+      {/* Theme Toggle Button */}
+      <div className="absolute top-4 right-4 z-20">
+        <ThemeToggle />
+      </div>
+
       {/* Decorative Gradient Background Orbs */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-violet-600/10 rounded-full blur-[120px] pointer-events-none"></div>

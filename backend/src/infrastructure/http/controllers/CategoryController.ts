@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { ForbiddenError, NotFoundError } from "../../../domain/errors/AppError.js";
 import { CreateCategoryUseCase } from "../../../application/use-cases/CreateCategoryUseCase.js";
 import { GetCategoriesUseCase } from "../../../application/use-cases/GetCategoriesUseCase.js";
 import { UpdateCategoryUseCase } from "../../../application/use-cases/UpdateCategoryUseCase.js";
@@ -68,20 +69,12 @@ export class CategoryController {
 
       const category = await this.categoryRepository.findById(categoryId);
       if (!category) {
-        res.status(404).json({
-          success: false,
-          message: "Kategori tidak ditemukan",
-        });
-        return;
+        throw new NotFoundError("Kategori tidak ditemukan");
       }
 
       if (user.role === "UNIT_ADMIN") {
         if (category.schoolUnitId !== user.schoolUnitId) {
-          res.status(403).json({
-            success: false,
-            message: "Akses ditolak: Anda tidak memiliki otoritas untuk mengelola kategori ini",
-          });
-          return;
+          throw new ForbiddenError("Akses ditolak: Anda tidak memiliki otoritas untuk mengelola kategori ini");
         }
       }
 
@@ -109,20 +102,12 @@ export class CategoryController {
 
       const category = await this.categoryRepository.findById(categoryId);
       if (!category) {
-        res.status(404).json({
-          success: false,
-          message: "Kategori tidak ditemukan",
-        });
-        return;
+        throw new NotFoundError("Kategori tidak ditemukan");
       }
 
       if (user.role === "UNIT_ADMIN") {
         if (category.schoolUnitId !== user.schoolUnitId) {
-          res.status(403).json({
-            success: false,
-            message: "Akses ditolak: Anda tidak memiliki otoritas untuk mengelola kategori ini",
-          });
-          return;
+          throw new ForbiddenError("Akses ditolak: Anda tidak memiliki otoritas untuk mengelola kategori ini");
         }
       }
 

@@ -3,15 +3,18 @@ import type { IUserRepository } from "../../domain/repositories/IUserRepository.
 import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
 import type { PasswordHasher } from "../../infrastructure/services/PasswordHasher.js";
 import type { Student } from "../../domain/entities/Student.js";
+import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
 
 export interface CreateStudentRequest {
   studentNumber: string;
   name: string;
+  className: string;
   schoolUnitId: number;
   enrollmentYear: number;
   discountPercentage: number;
   parentName: string;
-  parentEmail: string;
+  parentEmail?: string;
+  parentPhoneNumber: string;
 }
 
 export class CreateStudentUseCase {
@@ -28,7 +31,7 @@ export class CreateStudentUseCase {
       data.studentNumber
     );
     if (existingStudent) {
-      throw new Error("Gagal: Nomor induk siswa (NIS) sudah terdaftar");
+      throw new BadRequestError("Gagal: Nomor induk siswa (NIS) sudah terdaftar");
     }
 
     // 2. Cek ketersediaan tarif dasar
@@ -37,16 +40,20 @@ export class CreateStudentUseCase {
       data.enrollmentYear
     );
     if (!tariff) {
-      throw new Error(
+      throw new NotFoundError(
         "Gagal: Tarif dasar SPP untuk unit dan angkatan ini belum dikonfigurasi"
       );
     }
 
-    // 3. Periksa akun parent
-    const existingParent = await this.userRepository.findByEmail(data.parentEmail);
+    // 3. Periksa akun parent (berdasarkan nomor HP)
+    const existingParent = await this.userRepository.findByPhoneNumber(
+      data.parentPhoneNumber
+    );
 
     let parentId: number | undefined;
-    let parentDataToCreate: { name: string; email: string; passwordHash: string } | undefined;
+    let parentDataToCreate:
+      | { name: string; email: string; phoneNumber: string; passwordHash: string }
+      | undefined;
 
     if (existingParent) {
       parentId = existingParent.id;
@@ -54,7 +61,8 @@ export class CreateStudentUseCase {
       const passwordHash = await this.passwordHasher.hash("parent123");
       parentDataToCreate = {
         name: data.parentName,
-        email: data.parentEmail,
+        email: data.parentEmail || `${data.parentPhoneNumber}@sekolah.id`, // Fallback email jika tidak ada
+        phoneNumber: data.parentPhoneNumber,
         passwordHash,
       };
     }
@@ -64,10 +72,11 @@ export class CreateStudentUseCase {
       {
         studentNumber: data.studentNumber,
         name: data.name,
+        className: data.className,
         schoolUnitId: data.schoolUnitId,
         enrollmentYear: data.enrollmentYear,
         discountPercentage: data.discountPercentage,
-        parentId: parentId as any, // Will be set in repo if parentDataToCreate is provided
+        parentId: parentId as any,
       },
       parentDataToCreate
     );

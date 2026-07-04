@@ -2,6 +2,7 @@ import type { ITransactionRepository } from "../../domain/repositories/ITransact
 import type { ICategoryRepository } from "../../domain/repositories/ICategoryRepository.js";
 import type { Transaction } from "../../domain/entities/Transaction.js";
 import type { CategoryType, PaymentMethod } from "@prisma/client";
+import { BadRequestError } from "../../domain/errors/AppError.js";
 
 export class CreateTransactionUseCase {
   constructor(
@@ -21,11 +22,11 @@ export class CreateTransactionUseCase {
     const category = await this.categoryRepository.findById(data.categoryId);
 
     if (!category) {
-      throw new Error("Kategori transaksi tidak valid");
+      throw new BadRequestError("Kategori transaksi tidak valid");
     }
 
     if (category.type !== data.type) {
-        throw new Error("Tipe kategori tidak cocok dengan konteks pencatatan");
+        throw new BadRequestError("Tipe kategori tidak cocok dengan konteks pencatatan");
     }
 
     return await this.transactionRepository.create({

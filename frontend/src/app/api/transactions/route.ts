@@ -71,11 +71,12 @@ export async function GET(req: NextRequest) {
     const totalExpense = transactions
       .filter((t) => t.type === "EXPENSE")
       .reduce((sum, t) => sum + t.amount, 0);
+    const currentBalance = totalIncome - totalExpense;
 
     return NextResponse.json({
       success: true,
       message: "Data rekapitulasi jurnal kas berhasil diambil",
-      summary: { totalIncome, totalExpense },
+      summary: { totalIncome, totalExpense, currentBalance },
       data: transactions,
     });
   } catch (error) {

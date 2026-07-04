@@ -33,9 +33,11 @@ export async function GET(req: NextRequest) {
     const where: any = {};
     if (schoolUnitId) where.schoolUnitId = schoolUnitId;
     if (search) {
+      const isPostgres = process.env.DATABASE_URL?.startsWith("postgres") || process.env.DATABASE_URL?.startsWith("postgresql");
+      const filterMode = isPostgres ? { mode: "insensitive" as const } : {};
       where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { studentNumber: { contains: search, mode: "insensitive" } },
+        { name: { contains: search, ...filterMode } },
+        { studentNumber: { contains: search, ...filterMode } },
       ];
     }
 
@@ -75,11 +77,13 @@ export async function POST(req: NextRequest) {
     const {
       studentNumber,
       name,
+      className,
       schoolUnitId,
       enrollmentYear,
       discountPercentage,
       parentName,
       parentEmail,
+      parentPhoneNumber,
     } = await req.json();
 
     // UNIT_ADMIN isolation
@@ -104,6 +108,7 @@ export async function POST(req: NextRequest) {
         data: {
           name: parentName,
           email: parentEmail,
+          phoneNumber: parentPhoneNumber || null,
           password: passwordHash,
           role: "PARENT",
           schoolUnitId: null,
@@ -114,6 +119,7 @@ export async function POST(req: NextRequest) {
         data: {
           studentNumber,
           name,
+          className: className || "N/A",
           schoolUnitId: Number(schoolUnitId),
           enrollmentYear: Number(enrollmentYear),
           discountPercentage: Number(discountPercentage ?? 0),

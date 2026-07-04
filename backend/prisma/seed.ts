@@ -82,6 +82,7 @@ async function main() {
     create: {
       name: 'Hendra Wijaya (Wali Murid)',
       email: 'parent@test.com',
+      phoneNumber: '081234567890',
       password: defaultPasswordParent,
       role: Role.PARENT,
       schoolUnitId: null,
@@ -174,20 +175,22 @@ async function main() {
     create: {
       studentNumber: 'SD-2024-001',
       name: 'Budi Santoso',
+      className: '6A',
       schoolUnitId: unitSD.id,
       parentId: parent.id,
       enrollmentYear: 2024,
-      discountPercentage: 10,
+      discountPercentage: 10, // Dapat potongan diskon 10%
     },
   });
 
   // Menambahkan anak kedua ke Parent Hendra Wijaya yang bersekolah di TK angkatan 2025 tanpa diskon
-  await prisma.student.upsert({
+  const studentSiti = await prisma.student.upsert({
     where: { studentNumber: 'TK-2025-001' },
     update: {},
     create: {
       studentNumber: 'TK-2025-001',
       name: 'Siti Aminah',
+      className: 'TK A1',
       schoolUnitId: unitTK.id,
       parentId: parent.id,
       enrollmentYear: 2025,
@@ -195,7 +198,170 @@ async function main() {
     },
   });
 
+  // Tambahan Siswa Baru untuk data pengujian yang lebih bervariasi
+  const studentRian = await prisma.student.upsert({
+    where: { studentNumber: 'SD-2024-002' },
+    update: {},
+    create: {
+      studentNumber: 'SD-2024-002',
+      name: 'Rian Hidayat',
+      className: '6B',
+      schoolUnitId: unitSD.id,
+      parentId: parent.id,
+      enrollmentYear: 2024,
+      discountPercentage: 0,
+    },
+  });
+
+  const studentDewi = await prisma.student.upsert({
+    where: { studentNumber: 'SD-2025-001' },
+    update: {},
+    create: {
+      studentNumber: 'SD-2025-001',
+      name: 'Dewi Lestari',
+      className: '5A',
+      schoolUnitId: unitSD.id,
+      parentId: parent.id,
+      enrollmentYear: 2025,
+      discountPercentage: 20, // Diskon 20%
+    },
+  });
+
+  const studentFikri = await prisma.student.upsert({
+    where: { studentNumber: 'RA-2025-001' },
+    update: {},
+    create: {
+      studentNumber: 'RA-2025-001',
+      name: 'Fikri Pratama',
+      className: 'RA-A',
+      schoolUnitId: unitRA.id,
+      parentId: parent.id,
+      enrollmentYear: 2025,
+      discountPercentage: 0,
+    },
+  });
+
+  // Tambahan Tarif SPP RA
+  await prisma.sppTariff.upsert({
+    where: {
+      uq_school_unit_enrollment_year: {
+        schoolUnitId: unitRA.id,
+        enrollmentYear: 2025,
+      },
+    },
+    update: {},
+    create: {
+      schoolUnitId: unitRA.id,
+      enrollmentYear: 2025,
+      amount: 100000,
+    },
+  });
+
   console.log('Data siswa pengujian berhasil disiapkan.');
+
+  // 7. Seed Invoices & Transactions (Data Transaksional Kas)
+  console.log('Seeding data tagihan dan transaksi kas masuk/keluar...');
+  
+  const studentBudi = await prisma.student.findUnique({ where: { studentNumber: 'SD-2024-001' } });
+  
+  if (studentBudi) {
+    // Generate invoice & transaksi SPP Januari - Juni 2026 untuk Budi
+    for (let m = 1; m <= 6; m++) {
+      const baseAmount = 150000;
+      const discountApplied = 15000; // 10%
+      const amount = baseAmount - discountApplied;
+      const status = m <= 3 ? 'PAID' : 'PENDING';
+      
+      const invoice = await prisma.invoice.upsert({
+        where: {
+          uq_student_billing_period: {
+            studentId: studentBudi.id,
+            month: m,
+            year: 2026,
+            invoiceType: 'SPP',
+          },
+        },
+        update: {},
+        create: {
+          studentId: studentBudi.id,
+          invoiceType: 'SPP',
+          month: m,
+          year: 2026,
+          baseAmount,
+          discountApplied,
+          amount,
+          status,
+          midtransOrderId: status === 'PAID' ? `MOCK-SNAP-BUDI-${m}` : null,
+        },
+      });
+      
+      if (status === 'PAID') {
+        // Buat transaksi SPP masuk di kasir
+        await prisma.transaction.create({
+          data: {
+            date: new Date(2026, m - 1, 10, 10, 0, 0),
+            type: 'INCOME',
+            categoryId: 1, // SPP
+            invoiceId: invoice.id,
+            paymentMethod: 'TRANSFER',
+            amount,
+            description: `Pembayaran SPP Budi Santoso Bulan ${m} 2026`,
+            schoolUnitId: studentBudi.schoolUnitId,
+            recordedById: adminSD.id,
+          },
+        });
+      }
+    }
+  }
+
+  // Tambahkan transaksi Pengeluaran Kas agar grafik dashboard seimbang
+  await prisma.transaction.create({
+    data: {
+      date: new Date(2026, 0, 15, 14, 0, 0),
+      type: 'EXPENSE',
+      categoryId: 5, // Operasional
+      paymentMethod: 'CASH',
+      amount: 50000,
+      description: 'Pembelian ATK Kantor Sekolah',
+      schoolUnitId: unitSD.id,
+      recordedById: adminSD.id,
+    },
+  });
+
+  await prisma.transaction.create({
+    data: {
+      date: new Date(2026, 1, 28, 16, 30, 0),
+      type: 'EXPENSE',
+      categoryId: 4, // Gaji Guru
+      paymentMethod: 'TRANSFER',
+      amount: 200000,
+      description: 'Pembayaran Gaji Guru Honor SD',
+      schoolUnitId: unitSD.id,
+      recordedById: adminSD.id,
+    },
+  });
+
+  console.log('🔄 Menyinkronkan database sequence auto-increment...');
+
+  // Daftar tabel yang menggunakan ID auto-increment statis di seeder
+  const tables = ['school_units', 'categories'];
+
+  const isPostgres = process.env.DATABASE_URL?.startsWith('postgres') || process.env.DATABASE_URL?.startsWith('postgresql');
+  if (isPostgres) {
+    for (const tableName of tables) {
+      await prisma.$executeRawUnsafe(`
+        SELECT setval(
+          pg_get_serial_sequence('"${tableName}"', 'id'),
+          coalesce(max(id), 0) + 1,
+          false
+        ) FROM "${tableName}";
+      `);
+    }
+    console.log('✅ Semua database sequence berhasil disinkronkan!');
+  } else {
+    console.log('ℹ️ Mengabaikan sinkronisasi sequence auto-increment untuk SQLite.');
+  }
+
 
   console.log('\n=== Proses Seeding Selesai dengan Sukses! ===');
 }
@@ -209,3 +375,4 @@ main()
     await prisma.$disconnect();
     process.exit(1);
   });
+

@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { ForbiddenError } from "../../../domain/errors/AppError.js";
 import type { CreateTransactionUseCase } from "../../../application/use-cases/CreateTransactionUseCase.js";
 import type { GetTransactionsUseCase } from "../../../application/use-cases/GetTransactionsUseCase.js";
 
@@ -34,13 +35,6 @@ export class TransactionController {
         data: result,
       });
     } catch (error: any) {
-      if (error.message === "Kategori transaksi tidak valid" || error.message === "Tipe kategori tidak cocok dengan konteks pencatatan") {
-          res.status(400).json({
-              success: false,
-              message: error.message
-          });
-          return;
-      }
       next(error);
     }
   }
@@ -54,11 +48,7 @@ export class TransactionController {
       // Enforce Unit Isolation
       if (user.role === "UNIT_ADMIN") {
         if (schoolUnitId && Number(schoolUnitId) !== user.schoolUnitId) {
-          res.status(403).json({
-            success: false,
-            message: "Akses ditolak: Anda tidak memiliki otoritas untuk mengelola unit sekolah ini",
-          });
-          return;
+          throw new ForbiddenError("Akses ditolak: Anda tidak memiliki otoritas untuk mengelola unit sekolah ini");
         }
         schoolUnitId = user.schoolUnitId?.toString();
       }

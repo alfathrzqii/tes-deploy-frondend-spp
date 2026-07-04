@@ -27,8 +27,8 @@ app.use("/api/invoices", invoiceRoutes);
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  const status = err.statusCode || 500;
   const message = err.message || "Internal Server Error";
-  const status = message === "Email atau password salah" ? 401 : 500;
 
   if (status === 500) {
     logger.error(err.message, err.stack);

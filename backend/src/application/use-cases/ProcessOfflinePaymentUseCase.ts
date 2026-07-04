@@ -2,6 +2,7 @@ import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepos
 import type { IStudentRepository } from "../../domain/repositories/IStudentRepository.js";
 import type { ISppTariffRepository } from "../../domain/repositories/ISppTariffRepository.js";
 import { InvoiceType, InvoiceStatus, CategoryType, PaymentMethod } from "@prisma/client";
+import { BadRequestError, NotFoundError } from "../../domain/errors/AppError.js";
 
 export class ProcessOfflinePaymentUseCase {
   constructor(
@@ -27,7 +28,7 @@ export class ProcessOfflinePaymentUseCase {
     );
 
     if (existingInvoice && existingInvoice.status === InvoiceStatus.PAID) {
-      throw new Error("Gagal: Tagihan SPP siswa untuk bulan dan tahun tersebut sudah lunas");
+      throw new BadRequestError("Gagal: Tagihan SPP siswa untuk bulan dan tahun tersebut sudah lunas");
     }
 
     // 2. Kalkulasi & Snapshot Tarif Dasar SPP (Jika Invoice Belum Ada)
@@ -38,7 +39,7 @@ export class ProcessOfflinePaymentUseCase {
     if (!existingInvoice) {
       student = await this.studentRepository.findById(studentId);
       if (!student) {
-        throw new Error("Gagal: Siswa tidak ditemukan");
+        throw new NotFoundError("Gagal: Siswa tidak ditemukan");
       }
 
       const tariff = await this.sppTariffRepository.findByUnitAndYear(
@@ -47,7 +48,7 @@ export class ProcessOfflinePaymentUseCase {
       );
 
       if (!tariff) {
-        throw new Error("Gagal: Master tarif SPP untuk angkatan siswa ini belum dikonfigurasi");
+        throw new NotFoundError("Gagal: Master tarif SPP untuk angkatan siswa ini belum dikonfigurasi");
       }
 
       const baseAmount = tariff.amount;
@@ -93,14 +94,10 @@ export class ProcessOfflinePaymentUseCase {
     );
 
     return {
-      id: result.invoice.id,
       invoiceId: result.invoice.id,
       studentId: result.invoice.studentId,
       month: result.invoice.month,
       year: result.invoice.year,
-      baseAmount: result.invoice.baseAmount,
-      discountApplied: result.invoice.discountApplied,
-      amount: result.invoice.amount,
       amountPaid: result.transaction.amount,
       transactionId: result.transaction.id,
     };

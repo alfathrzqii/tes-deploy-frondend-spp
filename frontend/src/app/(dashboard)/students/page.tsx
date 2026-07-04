@@ -19,6 +19,7 @@ interface Student {
   id: number;
   studentNumber: string;
   name: string;
+  className: string;
   schoolUnitId: number;
   parentId: number;
   enrollmentYear: number;
@@ -26,6 +27,7 @@ interface Student {
   parent: {
     name: string;
     email: string;
+    phoneNumber?: string | null;
   };
 }
 
@@ -54,11 +56,13 @@ export default function StudentsPage() {
   // Form Fields
   const [formNis, setFormNis] = useState("");
   const [formName, setFormName] = useState("");
+  const [formClassName, setFormClassName] = useState("");
   const [formUnitId, setFormUnitId] = useState<number>(3); // Default to SD
   const [formYear, setFormYear] = useState<number>(new Date().getFullYear());
   const [formDiscount, setFormDiscount] = useState<number>(0);
   const [formParentName, setFormParentName] = useState("");
   const [formParentEmail, setFormParentEmail] = useState("");
+  const [formParentPhoneNumber, setFormParentPhoneNumber] = useState("");
 
   const isUnitAdmin = user?.role === "UNIT_ADMIN";
 
@@ -103,11 +107,13 @@ export default function StudentsPage() {
     setSelectedStudent(null);
     setFormNis("");
     setFormName("");
+    setFormClassName("");
     setFormUnitId(isUnitAdmin ? (user.schoolUnitId || 3) : 3);
     setFormYear(new Date().getFullYear());
     setFormDiscount(0);
     setFormParentName("");
     setFormParentEmail("");
+    setFormParentPhoneNumber("");
     setIsModalOpen(true);
   };
 
@@ -116,11 +122,13 @@ export default function StudentsPage() {
     setSelectedStudent(student);
     setFormNis(student.studentNumber);
     setFormName(student.name);
+    setFormClassName(student.className);
     setFormUnitId(student.schoolUnitId);
     setFormYear(student.enrollmentYear);
     setFormDiscount(student.discountPercentage);
     setFormParentName(student.parent.name);
     setFormParentEmail(student.parent.email);
+    setFormParentPhoneNumber(student.parent.phoneNumber || "");
     setIsModalOpen(true);
   };
 
@@ -145,19 +153,21 @@ export default function StudentsPage() {
         const payload = {
           studentNumber: formNis.trim(),
           name: formName.trim(),
+          className: formClassName.trim(),
           schoolUnitId: formUnitId,
           enrollmentYear: formYear,
           discountPercentage: Number(formDiscount),
           parentName: formParentName.trim(),
           parentEmail: formParentEmail.trim(),
+          parentPhoneNumber: formParentPhoneNumber.trim(),
         };
-
         const response = await api.post("/students", payload);
         setSuccessMsg(response.data.message || "Data siswa berhasil didaftarkan");
       } else if (modalMode === "edit" && selectedStudent) {
-        // Backend PUT /api/students/:id allows updating { name, discountPercentage }
+        // Backend PUT /api/students/:id allows updating { name, className, discountPercentage }
         const payload = {
           name: formName.trim(),
+          className: formClassName.trim(),
           discountPercentage: Number(formDiscount),
         };
         const response = await api.put(`/students/${selectedStudent.id}`, payload);
@@ -305,9 +315,16 @@ export default function StudentsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1 items-start">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                          {getUnitName(student.schoolUnitId)}
-                        </span>
+                        <div className="flex gap-1.5 items-center">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                            {getUnitName(student.schoolUnitId)}
+                          </span>
+                          {student.className && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                              {student.className}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-slate-400">
                           Angkatan {student.enrollmentYear}
                         </span>
@@ -326,6 +343,9 @@ export default function StudentsPage() {
                       <div className="flex flex-col">
                         <span className="font-medium text-slate-300">{student.parent?.name}</span>
                         <span className="text-[10px] text-slate-500">{student.parent?.email}</span>
+                        {student.parent?.phoneNumber && (
+                          <span className="text-[10px] text-slate-500/70 mt-0.5">{student.parent?.phoneNumber}</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
@@ -397,6 +417,18 @@ export default function StudentsPage() {
                   placeholder="Nama Siswa"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-750 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {/* Class Name field */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-300">Kelas</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: 10A, TK A1, dll."
+                  value={formClassName}
+                  onChange={(e) => setFormClassName(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-750 focus:outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>
@@ -478,6 +510,16 @@ export default function StudentsPage() {
                       />
                     </div>
                     <div className="space-y-1.5">
+                      <label className="font-semibold text-slate-300">No. HP Aktif Wali</label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: 08123456789"
+                        value={formParentPhoneNumber}
+                        onChange={(e) => setFormParentPhoneNumber(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-750 focus:outline-none focus:border-indigo-500 transition-colors"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
                       <label className="font-semibold text-slate-300">Email Aktif Wali</label>
                       <input
                         type="email"
@@ -492,6 +534,9 @@ export default function StudentsPage() {
                   <div className="bg-slate-950/50 border border-slate-850 p-2.5 rounded-lg text-slate-400">
                     <p className="font-semibold text-slate-300">{formParentName}</p>
                     <p className="text-[10px] text-slate-500 mt-0.5">{formParentEmail}</p>
+                    {formParentPhoneNumber && (
+                      <p className="text-[10px] text-slate-400 mt-1">No. HP: {formParentPhoneNumber}</p>
+                    )}
                     <p className="text-[10px] text-slate-500 mt-2 italic">
                       Informasi wali murid dapat diubah melalui menu manajemen pengguna jika diperlukan.
                     </p>

@@ -18,7 +18,7 @@ export async function PUT(
 
   try {
     const { id } = await params;
-    const { name, discountPercentage } = await req.json();
+    const { name, className, discountPercentage } = await req.json();
 
     // Check UNIT_ADMIN access
     if (authResult.role === "UNIT_ADMIN") {
@@ -39,7 +39,11 @@ export async function PUT(
 
     const student = await prisma.student.update({
       where: { id: Number(id) },
-      data: { name, discountPercentage: Number(discountPercentage) },
+      data: {
+        name,
+        className,
+        discountPercentage: Number(discountPercentage),
+      },
     });
 
     return NextResponse.json({

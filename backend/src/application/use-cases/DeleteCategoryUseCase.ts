@@ -1,4 +1,5 @@
 import type { ICategoryRepository } from "../../domain/repositories/ICategoryRepository.js";
+import { NotFoundError } from "../../domain/errors/AppError.js";
 
 export class DeleteCategoryUseCase {
   constructor(private categoryRepository: ICategoryRepository) {}
@@ -7,7 +8,7 @@ export class DeleteCategoryUseCase {
     const category = await this.categoryRepository.findById(id);
 
     if (!category) {
-      throw new Error("Kategori tidak ditemukan");
+      throw new NotFoundError("Kategori tidak ditemukan");
     }
 
     await this.categoryRepository.delete(id);

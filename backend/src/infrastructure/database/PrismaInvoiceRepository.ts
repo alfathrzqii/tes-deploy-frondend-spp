@@ -1,12 +1,9 @@
-import { PrismaClient, type InvoiceType, type InvoiceStatus, type CategoryType, type PaymentMethod } from "@prisma/client";
+import { type InvoiceType, type InvoiceStatus, type CategoryType, type PaymentMethod } from "@prisma/client";
 import type { IInvoiceRepository } from "../../domain/repositories/IInvoiceRepository.js";
+import prisma from "./prisma.js";
 
 export class PrismaInvoiceRepository implements IInvoiceRepository {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  private prisma = prisma;
 
   async findByUniqueComposite(
     studentId: number,
@@ -44,7 +41,7 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       amount: number;
       description: string;
       schoolUnitId: number;
-      recordedById?: number | null;
+      recordedById: number;
     },
     existingInvoiceId?: number
   ): Promise<any> {
@@ -69,18 +66,6 @@ export class PrismaInvoiceRepository implements IInvoiceRepository {
       });
 
       return { invoice, transaction };
-    });
-  }
-
-  async findManyByStudentAndYear(studentId: number, year: number): Promise<any[]> {
-    return await this.prisma.invoice.findMany({
-      where: {
-        studentId,
-        year,
-      },
-      orderBy: {
-        month: "asc",
-      },
     });
   }
 }

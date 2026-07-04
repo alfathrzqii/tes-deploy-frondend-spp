@@ -27,16 +27,6 @@ export class SppTariffController {
         data: result,
       });
     } catch (error: any) {
-      if (
-        error.message ===
-        "Gagal: Tarif SPP untuk unit dan angkatan tersebut sudah terdaftar"
-      ) {
-        res.status(400).json({
-          success: false,
-          message: error.message,
-        });
-        return;
-      }
       next(error);
     }
   }
@@ -74,13 +64,6 @@ export class SppTariffController {
         data: result,
       });
     } catch (error: any) {
-      if (error.message === "Tarif SPP tidak ditemukan") {
-        res.status(404).json({
-          success: false,
-          message: error.message,
-        });
-        return;
-      }
       next(error);
     }
   }
@@ -95,13 +78,6 @@ export class SppTariffController {
         message: "Tarif SPP berhasil dihapus",
       });
     } catch (error: any) {
-      if (error.message === "Tarif SPP tidak ditemukan") {
-        res.status(404).json({
-          success: false,
-          message: error.message,
-        });
-        return;
-      }
       next(error);
     }
   }

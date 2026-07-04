@@ -26,10 +26,8 @@ export interface IInvoiceRepository {
       amount: number;
       description: string;
       schoolUnitId: number;
-      recordedById?: number | null;
+      recordedById: number;
     },
     existingInvoiceId?: number
   ): Promise<any>;
-
-  findManyByStudentAndYear(studentId: number, year: number): Promise<any[]>;
 }

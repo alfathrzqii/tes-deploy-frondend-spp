@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import RouteGuard from "@/components/RouteGuard";
+import ThemeToggle from "@/components/ThemeToggle";
 import {
   LayoutDashboard,
   FolderTree,
@@ -221,22 +222,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </h2>
             </div>
 
-            {/* User Profile Info */}
-            {user && (
-              <div className="flex items-center gap-3">
-                <div className="text-right hidden sm:block">
-                  <p className="text-xs font-semibold text-white leading-tight">
-                    {user.name}
-                  </p>
-                  <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
-                    {user.role.replace("_", " ")}
-                  </p>
+            {/* User Profile Info & Theme Toggle */}
+            <div className="flex items-center gap-4">
+              <ThemeToggle />
+              
+              {user && (
+                <div className="flex items-center gap-3">
+                  <div className="text-right hidden sm:block">
+                    <p className="text-xs font-semibold text-white leading-tight">
+                      {user.name}
+                    </p>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
+                      {user.role.replace("_", " ")}
+                    </p>
+                  </div>
+                  <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700/85 flex items-center justify-center text-slate-300 shadow-inner">
+                    <UserIcon className="w-4 h-4" />
+                  </div>
                 </div>
-                <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700/85 flex items-center justify-center text-slate-300 shadow-inner">
-                  <UserIcon className="w-4 h-4" />
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </header>
 
           {/* Children Pages */}

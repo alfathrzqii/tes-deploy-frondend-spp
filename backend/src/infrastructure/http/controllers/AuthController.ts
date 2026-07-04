@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { UnauthorizedError } from "../../../domain/errors/AppError.js";
 import type { LoginUseCase } from "../../../application/use-cases/LoginUseCase.js";
 import type { PasswordHasher } from "../../services/PasswordHasher.js";
 import type { TokenService } from "../../services/TokenService.js";
@@ -14,18 +15,9 @@ export class AuthController {
 
   async login(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { email, password } = req.body;
+      const { identifier, password } = req.body;
 
-      const user = await this.loginUseCase.execute(email);
-
-      const isPasswordValid = await this.passwordHasher.compare(
-        password,
-        user.password
-      );
-
-      if (!isPasswordValid) {
-        throw new Error("Email atau password salah");
-      }
+      const user = await this.loginUseCase.execute(identifier, password);
 
       const token = this.tokenService.generateToken({
         id: user.id,
@@ -62,21 +54,13 @@ export class AuthController {
       const userId = req.user?.id;
 
       if (!userId) {
-        res.status(401).json({
-          success: false,
-          message: "Autentikasi gagal: Sesi tidak valid atau telah berakhir",
-        });
-        return;
+        throw new UnauthorizedError("Autentikasi gagal: Sesi tidak valid atau telah berakhir");
       }
 
       const user = await this.userRepository.findById(userId);
 
       if (!user) {
-        res.status(401).json({
-          success: false,
-          message: "Autentikasi gagal: Sesi tidak valid atau telah berakhir",
-        });
-        return;
+        throw new UnauthorizedError("Autentikasi gagal: Sesi tidak valid atau telah berakhir");
       }
 
       res.status(200).json({
@@ -94,21 +78,4 @@ export class AuthController {
       next(error);
     }
   }
-
-  async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      res.clearCookie("token", {
-        httpOnly: true,
-        secure: false, // development
-        sameSite: "strict",
-      });
-      res.status(200).json({
-        success: true,
-        message: "Logout berhasil",
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
 }
-

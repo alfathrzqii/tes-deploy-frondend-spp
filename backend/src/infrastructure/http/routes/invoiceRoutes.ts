@@ -26,9 +26,7 @@ const processOfflinePaymentUseCase = new ProcessOfflinePaymentUseCase(
 // Controller
 const invoiceController = new InvoiceController(
   processOfflinePaymentUseCase,
-  studentRepo,
-  invoiceRepo,
-  sppTariffRepo
+  studentRepo
 );
 
 // Routes
@@ -38,18 +36,6 @@ router.post(
   roleMiddleware(["SUPER_ADMIN", "UNIT_ADMIN"]),
   validateRequest(offlinePaymentSchema),
   invoiceController.payOffline.bind(invoiceController)
-);
-
-// Public check invoices for students/parents
-router.get(
-  "/student/:studentNumber",
-  invoiceController.getStudentInvoices.bind(invoiceController)
-);
-
-// Public simulated payment
-router.post(
-  "/pay-online-simulated",
-  invoiceController.payOnlineSimulated.bind(invoiceController)
 );
 
 export default router;

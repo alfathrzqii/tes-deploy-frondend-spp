@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import ThemeToggle from "@/components/ThemeToggle";
 import {
   Search,
   ArrowLeft,
@@ -213,11 +214,14 @@ export default function CekTagihanPage() {
             <span>Kembali ke Login</span>
           </Link>
 
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">
-              Portal Publik Wali Murid
-            </span>
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">
+                Portal Publik Wali Murid
+              </span>
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+            </div>
+            <ThemeToggle />
           </div>
         </div>
 

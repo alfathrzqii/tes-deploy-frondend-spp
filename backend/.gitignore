@@ -1,0 +1,23 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Environment variables (Rahasia!)
+.env
+.env.local
+
+# TypeScript compiled output
+dist/
+build/
+coverage/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.suo
+*.swp
