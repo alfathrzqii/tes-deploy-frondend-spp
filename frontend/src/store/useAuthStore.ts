@@ -31,7 +31,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (phoneNumber, password) => {
     set({ loading: true, error: null });
     try {
-      const response = await api.post("/auth/login", { phoneNumber, password });
+      const response = await api.post("/auth/login", {
+        phoneNumber,
+        identifier: phoneNumber,
+        password
+      });
       const { data } = response.data;
       set({ user: data, isAuthenticated: true, loading: false });
       return data;
