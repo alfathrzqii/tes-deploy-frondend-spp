@@ -67,7 +67,7 @@ export class PrismaStudentRepository implements IStudentRepository {
     search?: string;
     className?: string;
   }): Promise<
-    (Student & { parent: { name: string; email: string; phoneNumber: string | null } })[]
+    (Student & { parent: { name: string; email: string | null; phoneNumber: string | null } })[]
   > {
     const where: any = {};
 

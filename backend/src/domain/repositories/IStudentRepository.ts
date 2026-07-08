@@ -15,7 +15,7 @@ export interface IStudentRepository {
     search?: string;
     className?: string;
   }): Promise<
-    (Student & { parent: { name: string; email: string; phoneNumber: string | null } })[]
+    (Student & { parent: { name: string; email: string | null; phoneNumber: string | null } })[]
   >;
   findById(id: number): Promise<Student | null>;
   findByStudentNumber(studentNumber: string): Promise<Student | null>;

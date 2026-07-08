@@ -21,7 +21,7 @@ export class AuthController {
 
       const token = this.tokenService.generateToken({
         id: user.id,
-        email: user.email,
+        email: user.email || "",
         role: user.role,
         schoolUnitId: user.schoolUnitId,
       });
