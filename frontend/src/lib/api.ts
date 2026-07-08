@@ -1,8 +1,7 @@
 import axios from "axios";
 
 export const api = axios.create({
-  // Use /api prefix – all Next.js API Route Handlers live under /api/*
-  baseURL: "/api",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "/api",
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
