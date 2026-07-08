@@ -26,10 +26,11 @@ export class AuthController {
         schoolUnitId: user.schoolUnitId,
       });
 
+      const isProduction = process.env.NODE_ENV === "production";
       res.cookie("token", token, {
         httpOnly: true,
-        secure: false, // development
-        sameSite: "strict",
+        secure: isProduction || req.secure || req.headers["x-forwarded-proto"] === "https",
+        sameSite: isProduction ? "none" : "strict",
         maxAge: 24 * 60 * 60 * 1000,
       });
 
