@@ -5,20 +5,20 @@ import bcrypt from "bcryptjs";
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json();
+    const { phoneNumber, password } = await req.json();
 
-    if (!email || !password) {
+    if (!phoneNumber || !password) {
       return NextResponse.json(
-        { success: false, message: "Email dan password wajib diisi" },
+        { success: false, message: "Nomor HP dan password wajib diisi" },
         { status: 400 }
       );
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { phoneNumber } });
 
     if (!user) {
       return NextResponse.json(
-        { success: false, message: "Email atau password salah" },
+        { success: false, message: "Nomor HP atau password salah" },
         { status: 401 }
       );
     }
@@ -26,16 +26,18 @@ export async function POST(req: NextRequest) {
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return NextResponse.json(
-        { success: false, message: "Email atau password salah" },
+        { success: false, message: "Nomor HP atau password salah" },
         { status: 401 }
       );
     }
 
     const token = signToken({
       id: user.id,
+      phoneNumber: user.phoneNumber,
       email: user.email,
       role: user.role,
       schoolUnitId: user.schoolUnitId,
+      className: user.className,
     });
 
     const isProduction = process.env.NODE_ENV === "production";
@@ -47,8 +49,10 @@ export async function POST(req: NextRequest) {
         id: user.id,
         name: user.name,
         email: user.email,
+        phoneNumber: user.phoneNumber,
         role: user.role,
         schoolUnitId: user.schoolUnitId,
+        className: user.className,
       },
     });
 

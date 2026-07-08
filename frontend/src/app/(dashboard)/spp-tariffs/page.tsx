@@ -21,9 +21,10 @@ interface SppTariff {
 }
 
 const SCHOOL_UNITS = [
-  { id: 1, name: "RA/KB" },
-  { id: 2, name: "TK" },
+  { id: 1, name: "KB" },
+  { id: 2, name: "RA" },
   { id: 3, name: "SD" },
+  { id: 4, name: "TPA" },
 ];
 
 export default function SppTariffsPage() {

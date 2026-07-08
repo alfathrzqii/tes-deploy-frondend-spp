@@ -17,72 +17,163 @@ async function main() {
 
   // 2. Seed Data Master: School Units (Unit Sekolah)
   console.log('Seeding data unit sekolah...');
-  const unitRA = await prisma.schoolUnit.upsert({
+  const unitKB = await prisma.schoolUnit.upsert({
     where: { id: 1 },
-    update: {},
+    update: { name: 'KB' },
     create: {
       id: 1,
-      name: 'RA/KB',
+      name: 'KB',
     },
   });
 
-  const unitTK = await prisma.schoolUnit.upsert({
+  const unitRA = await prisma.schoolUnit.upsert({
     where: { id: 2 },
-    update: {},
+    update: { name: 'RA' },
     create: {
       id: 2,
-      name: 'TK',
+      name: 'RA',
     },
   });
 
   const unitSD = await prisma.schoolUnit.upsert({
     where: { id: 3 },
-    update: {},
+    update: { name: 'SD' },
     create: {
       id: 3,
       name: 'SD',
     },
   });
 
+  const unitTPA = await prisma.schoolUnit.upsert({
+    where: { id: 4 },
+    update: { name: 'TPA' },
+    create: {
+      id: 4,
+      name: 'TPA',
+    },
+  });
+
   console.log('Unit sekolah berhasil disiapkan.');
 
-  // 3. Seed Data Master: Users (Pengguna Pengujian)
+  // 3. Seed Data Master: Users (Pengguna Pengujian dengan nomor hp)
   console.log('Seeding data pengguna default...');
 
   // Akun Super Admin (Bisa mengelola semua unit - schoolUnitId NULL)
   const superAdmin = await prisma.user.upsert({
-    where: { email: 'superadmin@sekolah.sch.id' },
-    update: {},
+    where: { phoneNumber: '0811111111' },
+    update: {
+      name: 'Super Admin Yayasan',
+      password: defaultPasswordAdmin,
+      role: Role.SUPER_ADMIN,
+      schoolUnitId: null,
+      email: 'superadmin@sekolah.sch.id',
+    },
     create: {
       name: 'Super Admin Yayasan',
       email: 'superadmin@sekolah.sch.id',
+      phoneNumber: '0811111111',
       password: defaultPasswordAdmin,
       role: Role.SUPER_ADMIN,
-      schoolUnitId: null, // Akses global
+      schoolUnitId: null,
     },
   });
 
   // Akun Admin Unit SD (Hanya mengelola unit SD - schoolUnitId: 3)
   const adminSD = await prisma.user.upsert({
-    where: { email: 'adminsd@sekolah.sch.id' },
-    update: {},
+    where: { phoneNumber: '0822222222' },
+    update: {
+      name: 'Admin Keuangan SD',
+      password: defaultPasswordAdmin,
+      role: Role.UNIT_ADMIN,
+      schoolUnitId: unitSD.id,
+      email: 'adminsd@sekolah.sch.id',
+    },
     create: {
       name: 'Admin Keuangan SD',
       email: 'adminsd@sekolah.sch.id',
+      phoneNumber: '0822222222',
       password: defaultPasswordAdmin,
       role: Role.UNIT_ADMIN,
       schoolUnitId: unitSD.id,
     },
   });
 
+  // Akun Wali Kelas 6A (Role WALI_KELAS)
+  const waliKelas6A = await prisma.user.upsert({
+    where: { phoneNumber: '0833333333' },
+    update: {
+      name: 'Budi Santoso, S.Pd (Wali Kelas 6A)',
+      password: defaultPasswordAdmin,
+      role: Role.WALI_KELAS,
+      schoolUnitId: unitSD.id,
+      className: '6A',
+      email: 'walikelas6a@sekolah.sch.id',
+    },
+    create: {
+      name: 'Budi Santoso, S.Pd (Wali Kelas 6A)',
+      email: 'walikelas6a@sekolah.sch.id',
+      phoneNumber: '0833333333',
+      password: defaultPasswordAdmin,
+      role: Role.WALI_KELAS,
+      schoolUnitId: unitSD.id,
+      className: '6A',
+    },
+  });
+
   // Akun Orang Tua (Wali Murid - schoolUnitId NULL agar fleksibel multi-unit anak)
   const parent = await prisma.user.upsert({
-    where: { email: 'parent@test.com' },
-    update: {},
+    where: { phoneNumber: '081234567890' },
+    update: {
+      name: 'Hendra Wijaya (Wali Murid)',
+      password: defaultPasswordParent,
+      role: Role.PARENT,
+      schoolUnitId: null,
+      email: 'parent@test.com',
+    },
     create: {
       name: 'Hendra Wijaya (Wali Murid)',
       email: 'parent@test.com',
       phoneNumber: '081234567890',
+      password: defaultPasswordParent,
+      role: Role.PARENT,
+      schoolUnitId: null,
+    },
+  });
+
+  // Akun Orang Tua Kedua (Wali Rian Hidayat)
+  const parentRudi = await prisma.user.upsert({
+    where: { phoneNumber: '089999999999' },
+    update: {
+      name: 'Rudi Hermawan (Wali Rian)',
+      password: defaultPasswordParent,
+      role: Role.PARENT,
+      schoolUnitId: null,
+      email: 'rudi@test.com',
+    },
+    create: {
+      name: 'Rudi Hermawan (Wali Rian)',
+      email: 'rudi@test.com',
+      phoneNumber: '089999999999',
+      password: defaultPasswordParent,
+      role: Role.PARENT,
+      schoolUnitId: null,
+    },
+  });
+
+  // Akun Orang Tua Ketiga (Wali Dewi Lestari)
+  const parentSinta = await prisma.user.upsert({
+    where: { phoneNumber: '088888888888' },
+    update: {
+      name: 'Sinta Lestari (Wali Dewi)',
+      password: defaultPasswordParent,
+      role: Role.PARENT,
+      schoolUnitId: null,
+      email: 'sinta@test.com',
+    },
+    create: {
+      name: 'Sinta Lestari (Wali Dewi)',
+      email: 'sinta@test.com',
+      phoneNumber: '088888888888',
       password: defaultPasswordParent,
       role: Role.PARENT,
       schoolUnitId: null,
@@ -95,16 +186,22 @@ async function main() {
   console.log('Seeding data kategori transaksi keuangan...');
   const defaultCategories = [
     { id: 1, name: 'SPP', type: CategoryType.INCOME, schoolUnitId: null },
-    { id: 2, name: 'BOS', type: CategoryType.INCOME, schoolUnitId: null },
-    { id: 3, name: 'Donatur', type: CategoryType.INCOME, schoolUnitId: null },
-    { id: 4, name: 'Gaji Guru', type: CategoryType.EXPENSE, schoolUnitId: null },
-    { id: 5, name: 'Operasional', type: CategoryType.EXPENSE, schoolUnitId: null },
+    { id: 2, name: 'BOS', type: CategoryType.INCOME, schoolUnitId: 3 }, // SD specific
+    { id: 3, name: 'BOP', type: CategoryType.INCOME, schoolUnitId: 1 }, // KB specific (or 2 for RA)
+    { id: 4, name: 'Donatur', type: CategoryType.INCOME, schoolUnitId: null },
+    { id: 5, name: 'Gaji Guru', type: CategoryType.EXPENSE, schoolUnitId: null },
+    { id: 6, name: 'Operasional', type: CategoryType.EXPENSE, schoolUnitId: null },
+    { id: 7, name: 'Uang Pengembangan', type: CategoryType.INCOME, schoolUnitId: null },
   ];
 
   for (const cat of defaultCategories) {
     await prisma.category.upsert({
       where: { id: cat.id },
-      update: {},
+      update: {
+        name: cat.name,
+        type: cat.type,
+        schoolUnitId: cat.schoolUnitId,
+      },
       create: {
         id: cat.id,
         name: cat.name,
@@ -125,7 +222,7 @@ async function main() {
         enrollmentYear: 2024,
       },
     },
-    update: {},
+    update: { amount: 150000 },
     create: {
       schoolUnitId: unitSD.id,
       enrollmentYear: 2024,
@@ -141,7 +238,7 @@ async function main() {
         enrollmentYear: 2025,
       },
     },
-    update: {},
+    update: { amount: 175000 },
     create: {
       schoolUnitId: unitSD.id,
       enrollmentYear: 2025,
@@ -149,99 +246,7 @@ async function main() {
     },
   });
 
-  // TK Angkatan 2025: Rp 120.000 / bulan
-  await prisma.sppTariff.upsert({
-    where: {
-      uq_school_unit_enrollment_year: {
-        schoolUnitId: unitTK.id,
-        enrollmentYear: 2025,
-      },
-    },
-    update: {},
-    create: {
-      schoolUnitId: unitTK.id,
-      enrollmentYear: 2025,
-      amount: 120000,
-    },
-  });
-  console.log('Tarif dasar SPP berhasil disiapkan.');
-
-  // 6. Seed Data Master: Siswa (Student)
-  console.log('Seeding data siswa pengujian...');
-  // Menambahkan anak ke Parent Hendra Wijaya yang bersekolah di SD angkatan 2024 dengan diskon SPP 10%
-  await prisma.student.upsert({
-    where: { studentNumber: 'SD-2024-001' },
-    update: {},
-    create: {
-      studentNumber: 'SD-2024-001',
-      name: 'Budi Santoso',
-      className: '6A',
-      schoolUnitId: unitSD.id,
-      parentId: parent.id,
-      enrollmentYear: 2024,
-      discountPercentage: 10, // Dapat potongan diskon 10%
-    },
-  });
-
-  // Menambahkan anak kedua ke Parent Hendra Wijaya yang bersekolah di TK angkatan 2025 tanpa diskon
-  const studentSiti = await prisma.student.upsert({
-    where: { studentNumber: 'TK-2025-001' },
-    update: {},
-    create: {
-      studentNumber: 'TK-2025-001',
-      name: 'Siti Aminah',
-      className: 'TK A1',
-      schoolUnitId: unitTK.id,
-      parentId: parent.id,
-      enrollmentYear: 2025,
-      discountPercentage: 0,
-    },
-  });
-
-  // Tambahan Siswa Baru untuk data pengujian yang lebih bervariasi
-  const studentRian = await prisma.student.upsert({
-    where: { studentNumber: 'SD-2024-002' },
-    update: {},
-    create: {
-      studentNumber: 'SD-2024-002',
-      name: 'Rian Hidayat',
-      className: '6B',
-      schoolUnitId: unitSD.id,
-      parentId: parent.id,
-      enrollmentYear: 2024,
-      discountPercentage: 0,
-    },
-  });
-
-  const studentDewi = await prisma.student.upsert({
-    where: { studentNumber: 'SD-2025-001' },
-    update: {},
-    create: {
-      studentNumber: 'SD-2025-001',
-      name: 'Dewi Lestari',
-      className: '5A',
-      schoolUnitId: unitSD.id,
-      parentId: parent.id,
-      enrollmentYear: 2025,
-      discountPercentage: 20, // Diskon 20%
-    },
-  });
-
-  const studentFikri = await prisma.student.upsert({
-    where: { studentNumber: 'RA-2025-001' },
-    update: {},
-    create: {
-      studentNumber: 'RA-2025-001',
-      name: 'Fikri Pratama',
-      className: 'RA-A',
-      schoolUnitId: unitRA.id,
-      parentId: parent.id,
-      enrollmentYear: 2025,
-      discountPercentage: 0,
-    },
-  });
-
-  // Tambahan Tarif SPP RA
+  // RA Angkatan 2025: Rp 120.000 / bulan
   await prisma.sppTariff.upsert({
     where: {
       uq_school_unit_enrollment_year: {
@@ -249,11 +254,123 @@ async function main() {
         enrollmentYear: 2025,
       },
     },
-    update: {},
+    update: { amount: 120000 },
     create: {
       schoolUnitId: unitRA.id,
       enrollmentYear: 2025,
+      amount: 120000,
+    },
+  });
+
+  // KB Angkatan 2025: Rp 100.000 / bulan
+  await prisma.sppTariff.upsert({
+    where: {
+      uq_school_unit_enrollment_year: {
+        schoolUnitId: unitKB.id,
+        enrollmentYear: 2025,
+      },
+    },
+    update: { amount: 100000 },
+    create: {
+      schoolUnitId: unitKB.id,
+      enrollmentYear: 2025,
       amount: 100000,
+    },
+  });
+  console.log('Tarif dasar SPP berhasil disiapkan.');
+
+  // 6. Seed Data Master: Siswa (Student)
+  console.log('Seeding data siswa pengujian...');
+  
+  await prisma.student.upsert({
+    where: { studentNumber: 'SD-2024-001' },
+    update: {
+      name: 'Budi Santoso',
+      className: '6A',
+      schoolUnitId: unitSD.id,
+      parentId: parent.id,
+      enrollmentYear: 2024,
+      discountPercentage: 10,
+      birthDate: '10-05-2015',
+    },
+    create: {
+      studentNumber: 'SD-2024-001',
+      name: 'Budi Santoso',
+      className: '6A',
+      schoolUnitId: unitSD.id,
+      parentId: parent.id,
+      enrollmentYear: 2024,
+      discountPercentage: 10,
+      birthDate: '10-05-2015',
+    },
+  });
+
+  await prisma.student.upsert({
+    where: { studentNumber: 'RA-2025-001' },
+    update: {
+      name: 'Siti Aminah',
+      className: 'RA-A',
+      schoolUnitId: unitRA.id,
+      parentId: parent.id,
+      enrollmentYear: 2025,
+      discountPercentage: 0,
+      birthDate: '21-08-2020',
+    },
+    create: {
+      studentNumber: 'RA-2025-001',
+      name: 'Siti Aminah',
+      className: 'RA-A',
+      schoolUnitId: unitRA.id,
+      parentId: parent.id,
+      enrollmentYear: 2025,
+      discountPercentage: 0,
+      birthDate: '21-08-2020',
+    },
+  });
+
+  await prisma.student.upsert({
+    where: { studentNumber: 'SD-2024-002' },
+    update: {
+      name: 'Rian Hidayat',
+      className: '6B',
+      schoolUnitId: unitSD.id,
+      parentId: parentRudi.id,
+      enrollmentYear: 2024,
+      discountPercentage: 0,
+      birthDate: '15-11-2014',
+    },
+    create: {
+      studentNumber: 'SD-2024-002',
+      name: 'Rian Hidayat',
+      className: '6B',
+      schoolUnitId: unitSD.id,
+      parentId: parentRudi.id,
+      enrollmentYear: 2024,
+      discountPercentage: 0,
+      birthDate: '15-11-2014',
+    },
+  });
+
+  await prisma.student.upsert({
+    where: { studentNumber: 'SD-2025-001' },
+    update: {
+      name: 'Dewi Lestari',
+      className: '5A',
+      schoolUnitId: unitSD.id,
+      parentId: parentSinta.id,
+      enrollmentYear: 2025,
+      discountPercentage: 20,
+      birthDate: '03-02-2016',
+    },
+    create: {
+      studentNumber: 'SD-2025-001',
+      name: 'Dewi Lestari',
+      className: '5A',
+      schoolUnitId: unitSD.id,
+      parentId: parentSinta.id,
+      enrollmentYear: 2025,
+      discountPercentage: 20,
+      birthDate: '03-02-2016',
     },
   });
 
@@ -281,7 +398,9 @@ async function main() {
             invoiceType: 'SPP',
           },
         },
-        update: {},
+        update: {
+          status,
+        },
         create: {
           studentId: studentBudi.id,
           invoiceType: 'SPP',
@@ -312,6 +431,47 @@ async function main() {
         });
       }
     }
+
+    // Seed UANG_PENGEMBANGAN invoice for Budi Santoso (Cicilan / Partial Payment)
+    const baseDevAmount = 2000000; // Rp 2.000.000
+    const devInvoice = await prisma.invoice.upsert({
+      where: {
+        uq_student_billing_period: {
+          studentId: studentBudi.id,
+          month: 7, // arbitrary month representing initialization
+          year: 2025,
+          invoiceType: 'UANG_PENGEMBANGAN',
+        },
+      },
+      update: {
+        status: 'PARTIALLY_PAID',
+      },
+      create: {
+        studentId: studentBudi.id,
+        invoiceType: 'UANG_PENGEMBANGAN',
+        month: 7,
+        year: 2025,
+        baseAmount: baseDevAmount,
+        discountApplied: 0,
+        amount: baseDevAmount,
+        status: 'PARTIALLY_PAID',
+      },
+    });
+
+    // Create a transaction of Rp 500.000 linked to this invoice
+    await prisma.transaction.create({
+      data: {
+        date: new Date(2025, 6, 15, 10, 0, 0),
+        type: 'INCOME',
+        categoryId: 7, // Uang Pengembangan
+        invoiceId: devInvoice.id,
+        paymentMethod: 'CASH',
+        amount: 500000,
+        description: 'Cicilan Ke-1 Uang Pengembangan Budi Santoso',
+        schoolUnitId: studentBudi.schoolUnitId,
+        recordedById: adminSD.id,
+      },
+    });
   }
 
   // Tambahkan transaksi Pengeluaran Kas agar grafik dashboard seimbang
@@ -319,7 +479,7 @@ async function main() {
     data: {
       date: new Date(2026, 0, 15, 14, 0, 0),
       type: 'EXPENSE',
-      categoryId: 5, // Operasional
+      categoryId: 6, // Operasional
       paymentMethod: 'CASH',
       amount: 50000,
       description: 'Pembelian ATK Kantor Sekolah',
@@ -332,7 +492,7 @@ async function main() {
     data: {
       date: new Date(2026, 1, 28, 16, 30, 0),
       type: 'EXPENSE',
-      categoryId: 4, // Gaji Guru
+      categoryId: 5, // Gaji Guru
       paymentMethod: 'TRANSFER',
       amount: 200000,
       description: 'Pembayaran Gaji Guru Honor SD',
@@ -374,4 +534,3 @@ main()
     await prisma.$disconnect();
     process.exit(1);
   });
-

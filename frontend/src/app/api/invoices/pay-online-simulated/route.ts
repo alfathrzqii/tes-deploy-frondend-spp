@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, isAuthError } from "@/lib/auth";
 
-// Public endpoint – no auth required (simulated Midtrans online payment)
 export async function POST(req: NextRequest) {
+  const authResult = await requireAuth(req);
+  if (isAuthError(authResult)) {
+    return NextResponse.json(
+      { success: false, message: "Autentikasi diperlukan. Silakan login terlebih dahulu" },
+      { status: 401 }
+    );
+  }
+
   try {
     const { studentNumber, month, year } = await req.json();
 
@@ -15,6 +23,33 @@ export async function POST(req: NextRequest) {
         { success: false, message: "Siswa tidak ditemukan" },
         { status: 404 }
       );
+    }
+
+    // Role-based boundary check for simulated payment
+    if (authResult.role === "PARENT") {
+      if (student.parentId !== authResult.id) {
+        return NextResponse.json(
+          { success: false, message: "Akses ditolak: Anda hanya diizinkan membayar tagihan anak Anda sendiri" },
+          { status: 403 }
+        );
+      }
+    } else if (authResult.role === "WALI_KELAS") {
+      if (
+        student.schoolUnitId !== authResult.schoolUnitId ||
+        student.className !== authResult.className
+      ) {
+        return NextResponse.json(
+          { success: false, message: "Akses ditolak: Anda hanya diizinkan memproses tagihan siswa kelas bimbingan Anda" },
+          { status: 403 }
+        );
+      }
+    } else if (authResult.role === "UNIT_ADMIN") {
+      if (student.schoolUnitId !== authResult.schoolUnitId) {
+        return NextResponse.json(
+          { success: false, message: "Akses ditolak: Anda hanya diizinkan memproses tagihan siswa unit sekolah Anda" },
+          { status: 403 }
+        );
+      }
     }
 
     // Check if already paid

@@ -6,7 +6,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 
 interface RouteGuardProps {
   children: React.ReactNode;
-  allowedRoles?: ("SUPER_ADMIN" | "UNIT_ADMIN" | "PARENT")[];
+  allowedRoles?: ("SUPER_ADMIN" | "UNIT_ADMIN" | "WALI_KELAS" | "PARENT")[];
 }
 
 export default function RouteGuard({ children, allowedRoles }: RouteGuardProps) {

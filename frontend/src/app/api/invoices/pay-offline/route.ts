@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { studentNumber, month, year } = await req.json();
+    const { studentNumber, month, year, invoiceType, paymentAmount } = await req.json();
 
     const student = await prisma.student.findUnique({
       where: { studentNumber },
@@ -42,31 +42,57 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const tariff = await prisma.sppTariff.findUnique({
-      where: {
-        uq_school_unit_enrollment_year: {
-          schoolUnitId: student.schoolUnitId,
-          enrollmentYear: student.enrollmentYear,
-        },
-      },
-    });
+    const currentType = invoiceType || "SPP";
+    const isSPP = currentType === "SPP";
 
-    if (!tariff) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Gagal: Master tarif SPP untuk angkatan siswa ini belum dikonfigurasi",
+    let baseAmount = 0;
+    let discountApplied = 0;
+    let netAmount = 0;
+
+    if (isSPP) {
+      const tariff = await prisma.sppTariff.findUnique({
+        where: {
+          uq_school_unit_enrollment_year: {
+            schoolUnitId: student.schoolUnitId,
+            enrollmentYear: student.enrollmentYear,
+          },
         },
+      });
+
+      if (!tariff) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Gagal: Master tarif SPP untuk angkatan siswa ini belum dikonfigurasi",
+          },
+          { status: 400 }
+        );
+      }
+
+      baseAmount = tariff.amount;
+      discountApplied = Math.floor(
+        (baseAmount * student.discountPercentage) / 100
+      );
+      netAmount = baseAmount - discountApplied;
+    } else if (currentType === "UANG_PENGEMBANGAN") {
+      baseAmount = 2000000; // Rp 2.000.000 default building fee
+      discountApplied = 0;
+      netAmount = baseAmount;
+    } else {
+      baseAmount = 500000; // default for other types e.g. KEGIATAN
+      discountApplied = 0;
+      netAmount = baseAmount;
+    }
+
+    const payAmount = paymentAmount ? Number(paymentAmount) : netAmount;
+
+    if (payAmount <= 0) {
+      return NextResponse.json(
+        { success: false, message: "Nominal pembayaran wajib lebih besar dari 0" },
         { status: 400 }
       );
     }
-
-    const baseAmount = tariff.amount;
-    const discountApplied = Math.floor(
-      (baseAmount * student.discountPercentage) / 100
-    );
-    const netAmount = baseAmount - discountApplied;
 
     // Check if invoice already exists
     const existing = await prisma.invoice.findUnique({
@@ -75,7 +101,12 @@ export async function POST(req: NextRequest) {
           studentId: student.id,
           month: Number(month),
           year: Number(year),
-          invoiceType: "SPP",
+          invoiceType: currentType,
+        },
+      },
+      include: {
+        transactions: {
+          where: { type: "INCOME" },
         },
       },
     });
@@ -84,36 +115,60 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Gagal: Tagihan SPP siswa untuk bulan dan tahun tersebut sudah lunas",
+          message: `Gagal: Tagihan ${currentType} untuk periode tersebut sudah lunas`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Calculate remaining balance
+    const targetTotalAmount = existing ? existing.amount : netAmount;
+    const alreadyPaid = existing
+      ? existing.transactions.reduce((sum, tx) => sum + tx.amount, 0)
+      : 0;
+    const remainingBalance = targetTotalAmount - alreadyPaid;
+
+    if (payAmount > remainingBalance) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Gagal: Nominal pembayaran melebihi sisa tagihan (Sisa: Rp ${remainingBalance.toLocaleString("id-ID")})`,
         },
         { status: 400 }
       );
     }
 
     // Find SPP category (INCOME type)
-    const sppCategory = await prisma.category.findFirst({
-      where: { name: "SPP", type: "INCOME" },
+    let categoryName = isSPP ? "SPP" : "Uang Pengembangan";
+    if (currentType === "EKSTRAKURIKULER") categoryName = "SPP"; // reuse spp or fallback
+    
+    const paymentCategory = await prisma.category.findFirst({
+      where: { name: categoryName, type: "INCOME" },
+    }) || await prisma.category.findFirst({
+      where: { type: "INCOME" },
     });
 
     const result = await prisma.$transaction(async (tx) => {
       let invoice;
+      const isNowFullyPaid = alreadyPaid + payAmount >= targetTotalAmount;
+      const finalStatus = isNowFullyPaid ? "PAID" : "PARTIALLY_PAID";
+
       if (existing) {
         invoice = await tx.invoice.update({
           where: { id: existing.id },
-          data: { status: "PAID" },
+          data: { status: finalStatus },
         });
       } else {
         invoice = await tx.invoice.create({
           data: {
             studentId: student.id,
-            invoiceType: "SPP",
+            invoiceType: currentType,
             month: Number(month),
             year: Number(year),
             baseAmount,
             discountApplied,
-            amount: netAmount,
-            status: "PAID",
+            amount: targetTotalAmount,
+            status: finalStatus,
           },
         });
       }
@@ -121,10 +176,10 @@ export async function POST(req: NextRequest) {
       const transaction = await tx.transaction.create({
         data: {
           type: "INCOME",
-          categoryId: sppCategory?.id ?? 1,
+          categoryId: paymentCategory?.id ?? 1,
           paymentMethod: "CASH",
-          amount: netAmount,
-          description: `Pembayaran SPP tunai bulan ${month} tahun ${year} untuk siswa ${student.name}`,
+          amount: payAmount,
+          description: `Pembayaran ${categoryName} tunai (${isNowFullyPaid ? "Lunas" : "Cicilan"}) bulan ${month}/${year} untuk siswa ${student.name}`,
           schoolUnitId: student.schoolUnitId,
           recordedById: authResult.id,
           invoiceId: invoice.id,
@@ -136,7 +191,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Pembayaran tunai SPP offline berhasil diproses",
+      message: `Pembayaran ${currentType} berhasil diproses (${result.invoice.status === "PAID" ? "Lunas" : "Cicilan tercatat"})`,
       data: result,
     });
   } catch (error: any) {

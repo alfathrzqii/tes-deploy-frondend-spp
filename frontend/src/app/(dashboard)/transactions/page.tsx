@@ -13,7 +13,8 @@ import {
   X,
   CheckCircle2,
   Calendar,
-  Filter
+  Filter,
+  FileSpreadsheet
 } from "lucide-react";
 
 interface Transaction {
@@ -43,9 +44,10 @@ interface Category {
 }
 
 const SCHOOL_UNITS = [
-  { id: 1, name: "RA/KB" },
-  { id: 2, name: "TK" },
+  { id: 1, name: "KB" },
+  { id: 2, name: "RA" },
   { id: 3, name: "SD" },
+  { id: 4, name: "TPA" },
 ];
 
 export default function TransactionsPage() {
@@ -219,6 +221,30 @@ export default function TransactionsPage() {
     });
   };
 
+  const handleExportCsv = () => {
+    const headers = ["Tanggal", "Jenis", "Kategori", "Metode", "Nominal", "Deskripsi", "Unit Sekolah"];
+    const rows = transactions.map(t => [
+      new Date(t.date).toLocaleDateString("id-ID"),
+      t.type === "INCOME" ? "Pemasukan" : "Pengeluaran",
+      t.category?.name || "",
+      t.paymentMethod,
+      t.amount,
+      t.description || "",
+      getUnitName(t.schoolUnitId)
+    ]);
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Laporan_Kasir_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6 relative">
       {/* Header section */}
@@ -233,13 +259,23 @@ export default function TransactionsPage() {
           </p>
         </div>
 
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-500/10 hover:shadow-indigo-500/20 transition-all self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          Catat Transaksi Baru
-        </button>
+        <div className="flex gap-2 self-start sm:self-auto">
+          <button
+            onClick={handleExportCsv}
+            disabled={transactions.length === 0}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold shadow-md transition-all cursor-pointer disabled:opacity-50"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            Export CSV
+          </button>
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-500/10 hover:shadow-indigo-500/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Catat Transaksi Baru
+          </button>
+        </div>
       </div>
 
       {/* Alerts */}

@@ -4,9 +4,11 @@ import type { Role } from "@prisma/client";
 
 export interface TokenPayload {
   id: number;
-  email: string;
+  phoneNumber: string;
+  email: string | null;
   role: Role;
   schoolUnitId: number | null;
+  className: string | null;
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || "default_secret";

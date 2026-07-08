@@ -16,6 +16,7 @@ generator client {
 enum Role {
   SUPER_ADMIN
   UNIT_ADMIN
+  WALI_KELAS
   PARENT
 }
 
@@ -28,11 +29,13 @@ enum InvoiceType {
   SPP
   EKSTRAKURIKULER
   KEGIATAN
+  UANG_PENGEMBANGAN
   LAINNYA
 }
 
 enum InvoiceStatus {
   PENDING
+  PARTIALLY_PAID
   PAID
   VOID
 }
@@ -64,12 +67,13 @@ model SchoolUnit {
 model User {
   id           Int         @id @default(autoincrement())
   name         String
-  email        String      @unique
-  phoneNumber  String?     @unique @map("phone_number")
+  email        String?     @unique
+  phoneNumber  String      @unique @map("phone_number")
   password     String
   role         Role
   schoolUnitId Int?
   schoolUnit   SchoolUnit?   @relation(fields: [schoolUnitId], references: [id])
+  className    String?     @map("class_name")
   transactions Transaction[] @relation("RecorderToTransactions")
   students     Student[]     @relation("ParentToStudents")
 
@@ -100,6 +104,7 @@ model Student {
   parentId           Int         @map("parent_id")
   enrollmentYear     Int         @map("enrollment_year") // Tahun angkatan masuk
   discountPercentage Int         @default(0) @map("discount_percentage") // Persentase diskon (0-100)
+  birthDate          String?     @map("birth_date")
 
   // Relasi
   // Restrict mencegah penghapusan unit/parent jika masih ada data siswa aktif yang terikat dengannya

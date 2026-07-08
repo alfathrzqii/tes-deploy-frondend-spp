@@ -135,10 +135,16 @@ export default function CekTagihanPage() {
       }
     } catch (err: any) {
       console.error(err);
-      setError(
-        err.response?.data?.message ||
-        "Gagal menghubungi server. Pastikan database dan server backend aktif."
-      );
+      if (err.response?.status === 401) {
+        setError(
+          "Demi menjaga privasi siswa, rincian tagihan keuangan saat ini hanya dapat diakses setelah masuk ke akun Wali Murid terdaftar."
+        );
+      } else {
+        setError(
+          err.response?.data?.message ||
+          "Gagal menghubungi server. Pastikan database dan server backend aktif."
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -288,9 +294,20 @@ export default function CekTagihanPage() {
           </form>
 
           {error && (
-            <div className="mt-4 flex items-start gap-3 bg-red-950/45 border border-red-500/35 p-4 rounded-xl text-sm text-red-400">
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-              <span>{error}</span>
+            <div className="mt-4 flex flex-col gap-3.5 bg-red-950/45 border border-red-500/35 p-4 rounded-xl text-sm text-red-400">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+              {error.includes("akun") && (
+                <Link
+                  href="/login"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-650 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow-md w-full sm:w-auto self-start cursor-pointer"
+                >
+                  <span>Masuk ke Portal Wali Murid</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              )}
             </div>
           )}
         </div>

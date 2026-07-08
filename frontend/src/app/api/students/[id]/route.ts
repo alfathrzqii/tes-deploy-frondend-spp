@@ -9,7 +9,11 @@ export async function PUT(
   const authResult = await requireAuth(req);
   if (isAuthError(authResult)) return authResult;
 
-  if (authResult.role !== "SUPER_ADMIN" && authResult.role !== "UNIT_ADMIN") {
+  if (
+    authResult.role !== "SUPER_ADMIN" &&
+    authResult.role !== "UNIT_ADMIN" &&
+    authResult.role !== "WALI_KELAS"
+  ) {
     return NextResponse.json(
       { success: false, message: "Akses ditolak" },
       { status: 403 }
@@ -18,23 +22,41 @@ export async function PUT(
 
   try {
     const { id } = await params;
-    const { name, className, discountPercentage } = await req.json();
+    const { name, className, discountPercentage, birthDate } = await req.json();
 
-    // Check UNIT_ADMIN access
-    if (authResult.role === "UNIT_ADMIN") {
-      const existing = await prisma.student.findUnique({
-        where: { id: Number(id) },
-      });
-      if (!existing || existing.schoolUnitId !== authResult.schoolUnitId) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Akses ditolak: Anda tidak memiliki otoritas untuk mengelola siswa ini",
-          },
-          { status: 403 }
-        );
-      }
+    const existing = await prisma.student.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, message: "Siswa tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    // Role-based boundary isolation
+    if (authResult.role === "UNIT_ADMIN" && existing.schoolUnitId !== authResult.schoolUnitId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Akses ditolak: Anda tidak memiliki otoritas untuk unit sekolah ini",
+        },
+        { status: 403 }
+      );
+    }
+
+    if (
+      authResult.role === "WALI_KELAS" &&
+      (existing.schoolUnitId !== authResult.schoolUnitId || existing.className !== authResult.className)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Akses ditolak: Anda hanya diizinkan untuk mengelola siswa di kelas bimbingan Anda",
+        },
+        { status: 403 }
+      );
     }
 
     const student = await prisma.student.update({
@@ -43,6 +65,7 @@ export async function PUT(
         name,
         className,
         discountPercentage: Number(discountPercentage),
+        birthDate: birthDate !== undefined ? birthDate : existing.birthDate,
       },
     });
 
@@ -67,7 +90,11 @@ export async function DELETE(
   const authResult = await requireAuth(req);
   if (isAuthError(authResult)) return authResult;
 
-  if (authResult.role !== "SUPER_ADMIN" && authResult.role !== "UNIT_ADMIN") {
+  if (
+    authResult.role !== "SUPER_ADMIN" &&
+    authResult.role !== "UNIT_ADMIN" &&
+    authResult.role !== "WALI_KELAS"
+  ) {
     return NextResponse.json(
       { success: false, message: "Akses ditolak" },
       { status: 403 }
@@ -77,23 +104,44 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    // Check UNIT_ADMIN access
-    if (authResult.role === "UNIT_ADMIN") {
-      const existing = await prisma.student.findUnique({
-        where: { id: Number(id) },
-      });
-      if (!existing || existing.schoolUnitId !== authResult.schoolUnitId) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Akses ditolak: Anda tidak memiliki otoritas untuk menghapus siswa ini",
-          },
-          { status: 403 }
-        );
-      }
+    const existing = await prisma.student.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, message: "Siswa tidak ditemukan" },
+        { status: 404 }
+      );
     }
 
+    // Role-based boundary isolation
+    if (authResult.role === "UNIT_ADMIN" && existing.schoolUnitId !== authResult.schoolUnitId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Akses ditolak: Anda tidak memiliki otoritas untuk unit sekolah ini",
+        },
+        { status: 403 }
+      );
+    }
+
+    if (
+      authResult.role === "WALI_KELAS" &&
+      (existing.schoolUnitId !== authResult.schoolUnitId || existing.className !== authResult.className)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Akses ditolak: Anda hanya diizinkan untuk menghapus siswa di kelas bimbingan Anda",
+        },
+        { status: 403 }
+      );
+    }
+
+    // Since SQLite parent reference is RESTRICT, we delete student.
+    // If we want to clean up parent accounts too, we check if parent has other students.
+    // To keep it simple, we just delete the student record.
     await prisma.student.delete({ where: { id: Number(id) } });
 
     return NextResponse.json({

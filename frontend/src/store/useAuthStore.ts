@@ -4,9 +4,11 @@ import { api } from "@/lib/api";
 export interface UserProfile {
   id: number;
   name: string;
-  email: string;
-  role: "SUPER_ADMIN" | "UNIT_ADMIN" | "PARENT";
+  email: string | null;
+  phoneNumber: string;
+  role: "SUPER_ADMIN" | "UNIT_ADMIN" | "WALI_KELAS" | "PARENT";
   schoolUnitId: number | null;
+  className: string | null;
 }
 
 interface AuthState {
@@ -14,7 +16,7 @@ interface AuthState {
   isAuthenticated: boolean;
   loading: boolean;
   error: string | null;
-  login: (email: string, password: string) => Promise<UserProfile>;
+  login: (phoneNumber: string, password: string) => Promise<UserProfile>;
   logout: () => Promise<void>;
   fetchMe: () => Promise<UserProfile | null>;
   clearError: () => void;
@@ -26,15 +28,15 @@ export const useAuthStore = create<AuthState>((set) => ({
   loading: false,
   error: null,
 
-  login: async (email, password) => {
+  login: async (phoneNumber, password) => {
     set({ loading: true, error: null });
     try {
-      const response = await api.post("/auth/login", { email, password });
+      const response = await api.post("/auth/login", { phoneNumber, password });
       const { data } = response.data;
       set({ user: data, isAuthenticated: true, loading: false });
       return data;
     } catch (error: any) {
-      const message = error.response?.data?.message || "Email atau password salah";
+      const message = error.response?.data?.message || "Nomor HP atau password salah";
       set({ error: message, loading: false });
       throw new Error(message);
     }

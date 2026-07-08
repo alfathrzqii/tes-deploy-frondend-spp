@@ -28,8 +28,10 @@ export async function GET(req: NextRequest) {
         id: user.id,
         name: user.name,
         email: user.email,
+        phoneNumber: user.phoneNumber,
         role: user.role,
         schoolUnitId: user.schoolUnitId,
+        className: user.className,
       },
     });
   } catch (error) {

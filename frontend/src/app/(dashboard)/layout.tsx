@@ -17,7 +17,10 @@ import {
   X,
   User as UserIcon,
   ChevronRight,
-  CreditCard
+  CreditCard,
+  TrendingDown,
+  PieChart,
+  Shield
 } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -25,6 +28,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -41,7 +45,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       name: "Dashboard",
       href: "/dashboard",
       icon: LayoutDashboard,
-      allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN", "PARENT"],
+      allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN", "WALI_KELAS", "PARENT"],
+    },
+    {
+      name: "Manajemen Pengguna",
+      href: "/users",
+      icon: Shield,
+      allowedRoles: ["SUPER_ADMIN"],
     },
     {
       name: "Kategori Keuangan",
@@ -59,13 +69,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       name: "Daftar Siswa",
       href: "/students",
       icon: Users,
-      allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN"],
+      allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN", "WALI_KELAS"],
     },
     {
       name: "Pembayaran SPP",
       href: "/payments",
       icon: CreditCard,
       allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN"],
+    },
+    {
+      name: "Tunggakan SPP",
+      href: "/unpaid",
+      icon: TrendingDown,
+      allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN", "WALI_KELAS"],
+    },
+    {
+      name: "Rekap Kelas",
+      href: "/class-recap",
+      icon: PieChart,
+      allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN", "WALI_KELAS"],
     },
     {
       name: "Buku Kas",
@@ -223,23 +245,56 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
 
             {/* User Profile Info & Theme Toggle */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 relative">
               <ThemeToggle />
               
               {user && (
-                <div className="flex items-center gap-3">
-                  <div className="text-right hidden sm:block">
-                    <p className="text-xs font-semibold text-white leading-tight">
-                      {user.name}
-                    </p>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
-                      {user.role.replace("_", " ")}
-                    </p>
+                <>
+                  <div 
+                    onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                    className="flex items-center gap-3 cursor-pointer hover:bg-slate-800/30 p-1.5 rounded-xl transition-all border border-transparent hover:border-slate-800/50"
+                  >
+                    <div className="text-right hidden sm:block">
+                      <p className="text-xs font-semibold text-white leading-tight">
+                        {user.name}
+                      </p>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
+                        {user.role.replace("_", " ")}
+                      </p>
+                    </div>
+                    <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700/85 flex items-center justify-center text-slate-300 shadow-inner">
+                      <UserIcon className="w-4 h-4" />
+                    </div>
                   </div>
-                  <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700/85 flex items-center justify-center text-slate-300 shadow-inner">
-                    <UserIcon className="w-4 h-4" />
-                  </div>
-                </div>
+
+                  {profileMenuOpen && (
+                    <>
+                      {/* Invisible backdrop to dismiss dropdown on click outside */}
+                      <div 
+                        className="fixed inset-0 z-40 cursor-default" 
+                        onClick={() => setProfileMenuOpen(false)}
+                      />
+                      <div className="absolute right-0 top-12 w-52 bg-slate-900 border border-slate-850 p-4 rounded-xl shadow-2xl space-y-3 z-50 animate-fade-in text-[11px]">
+                        <div className="space-y-1">
+                          <p className="font-extrabold text-white truncate">{user.name}</p>
+                          <p className="text-[10px] text-slate-500 font-mono truncate">{user.phoneNumber}</p>
+                          <p className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/15 font-bold inline-block uppercase mt-1">
+                            {user.role.replace("_", " ")}
+                          </p>
+                        </div>
+                        <div className="border-t border-slate-800 pt-2.5">
+                          <button
+                            onClick={handleLogout}
+                            className="flex items-center gap-2 w-full text-left font-bold text-rose-450 hover:text-rose-350 transition-colors py-1 cursor-pointer"
+                          >
+                            <LogOut className="w-3.5 h-3.5" />
+                            <span>Keluar dari Akun</span>
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </>
               )}
             </div>
           </header>
