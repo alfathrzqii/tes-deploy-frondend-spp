@@ -41,3 +41,5 @@ next-env.d.ts
 tes-deploy/
 scratch/
 **/scratch/
+spp-backend-render/
+**/spp-backend-render/
