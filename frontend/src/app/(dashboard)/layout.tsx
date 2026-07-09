@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import RouteGuard from "@/components/RouteGuard";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -23,9 +22,10 @@ import {
   Shield
 } from "lucide-react";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
+export default function DashboardLayout() {
+  const location = useLocation();
+  const pathname = location.pathname;
+  const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -33,7 +33,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const handleLogout = async () => {
     try {
       await logout();
-      router.push("/login");
+      navigate("/login");
     } catch (err) {
       console.error("Logout failed", err);
     }
@@ -129,7 +129,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               return (
                 <Link
                   key={item.name}
-                  href={item.href}
+                  to={item.href}
                   className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all group ${
                     isActive
                       ? "bg-gradient-to-r from-indigo-500/15 to-violet-500/5 text-indigo-400 border border-indigo-500/20 shadow-inner"
@@ -198,7 +198,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               return (
                 <Link
                   key={item.name}
-                  href={item.href}
+                  to={item.href}
                   onClick={() => setSidebarOpen(false)}
                   className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                     isActive
@@ -302,7 +302,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* Children Pages */}
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <div className="max-w-6xl mx-auto space-y-6">
-              {children}
+              <Outlet />
             </div>
           </main>
         </div>

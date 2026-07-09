@@ -21,15 +21,15 @@ export class AuthController {
 
       const token = this.tokenService.generateToken({
         id: user.id,
-        email: user.email || "",
+        email: user.email,
         role: user.role,
         schoolUnitId: user.schoolUnitId,
       });
 
-      const isProduction = process.env.NODE_ENV === "production";
+      const isProduction = process.env.NODE_ENV === "production" || req.headers["x-forwarded-proto"] === "https";
       res.cookie("token", token, {
         httpOnly: true,
-        secure: isProduction || req.secure || req.headers["x-forwarded-proto"] === "https",
+        secure: isProduction,
         sameSite: isProduction ? "none" : "strict",
         maxAge: 24 * 60 * 60 * 1000,
       });
@@ -74,6 +74,23 @@ export class AuthController {
           role: user.role,
           schoolUnitId: user.schoolUnitId,
         },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const isProduction = process.env.NODE_ENV === "production" || req.headers["x-forwarded-proto"] === "https";
+      res.clearCookie("token", {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "strict",
+      });
+      res.status(200).json({
+        success: true,
+        message: "Logout berhasil",
       });
     } catch (error) {
       next(error);

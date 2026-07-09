@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import ThemeToggle from "@/components/ThemeToggle";
 import {
@@ -213,7 +213,7 @@ export default function CekTagihanPage() {
         {/* Top Navbar */}
         <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-800/60">
           <Link
-            href="/login"
+            to="/login"
             className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -301,7 +301,7 @@ export default function CekTagihanPage() {
               </div>
               {error.includes("akun") && (
                 <Link
-                  href="/login"
+                  to="/login"
                   className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-650 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow-md w-full sm:w-auto self-start cursor-pointer"
                 >
                   <span>Masuk ke Portal Wali Murid</span>

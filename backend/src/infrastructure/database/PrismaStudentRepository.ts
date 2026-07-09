@@ -67,7 +67,7 @@ export class PrismaStudentRepository implements IStudentRepository {
     search?: string;
     className?: string;
   }): Promise<
-    (Student & { parent: { name: string; email: string | null; phoneNumber: string | null } })[]
+    (Student & { parent: { name: string; email: string; phoneNumber: string | null } })[]
   > {
     const where: any = {};
 
@@ -80,11 +80,9 @@ export class PrismaStudentRepository implements IStudentRepository {
     }
 
     if (filter?.search) {
-      const isPostgres = process.env.DATABASE_URL?.startsWith("postgres") || process.env.DATABASE_URL?.startsWith("postgresql");
-      const filterMode = isPostgres ? { mode: "insensitive" as const } : {};
       where.OR = [
-        { name: { contains: filter.search, ...filterMode } },
-        { studentNumber: { contains: filter.search, ...filterMode } },
+        { name: { contains: filter.search, mode: "insensitive" } },
+        { studentNumber: { contains: filter.search, mode: "insensitive" } },
       ];
     }
 
@@ -157,7 +155,7 @@ export class PrismaStudentRepository implements IStudentRepository {
 
   async update(
     id: number,
-    data: Partial<Pick<Student, "name" | "className" | "discountPercentage">>
+    data: Partial<Pick<Student, "name" | "discountPercentage">>
   ): Promise<Student> {
     const updated = await this.prisma.student.update({
       where: { id },

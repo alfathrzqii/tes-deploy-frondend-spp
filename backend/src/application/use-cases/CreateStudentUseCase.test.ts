@@ -40,7 +40,7 @@ describe('CreateStudentUseCase', () => {
   const mockTariff = {
     id: 1,
     schoolUnitId: 1,
-    enrollmentYear: 2023,
+    year: 2023,
     amount: 500000,
   };
 

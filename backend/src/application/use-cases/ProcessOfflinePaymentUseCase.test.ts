@@ -30,7 +30,7 @@ describe('ProcessOfflinePaymentUseCase', () => {
   };
 
   const mockStudent = new Student(1, '123', 'John Doe', '10A', 1, 5, 2023, 10);
-  const mockTariff = { id: 1, schoolUnitId: 1, enrollmentYear: 2023, amount: 500000 };
+  const mockTariff = { id: 1, schoolUnitId: 1, year: 2023, amount: 500000 };
 
   it('should process payment when invoice does not exist', async () => {
     mockInvoiceRepository.findByUniqueComposite.mockResolvedValue(null);
@@ -78,7 +78,7 @@ describe('ProcessOfflinePaymentUseCase', () => {
       month: 5,
       year: 2023,
       amount: 450000,
-      status: InvoiceStatus.PENDING
+      status: InvoiceStatus.UNPAID
     };
     mockInvoiceRepository.findByUniqueComposite.mockResolvedValue(existingInvoice);
     mockStudentRepository.findById.mockResolvedValue(mockStudent);

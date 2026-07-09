@@ -13,7 +13,7 @@ describe('GetStudentsUseCase', () => {
     vi.clearAllMocks();
   });
 
-  const mockStudents: (Student & { parent: { name: string; email: string; phoneNumber: string | null } })[] = [
+  const mockStudents = [
     {
       ...new Student(1, '123', 'John Doe', '10A', 1, 1, 2023, 0),
       parent: { name: 'Parent One', email: 'parent1@example.com', phoneNumber: '08123456789' }
@@ -45,7 +45,7 @@ describe('GetStudentsUseCase', () => {
 
   it('should filter students by search term', async () => {
     const filter = { search: 'John' };
-    const filteredStudents = [mockStudents[0]!];
+    const filteredStudents = [mockStudents[0]];
     mockStudentRepository.findAll.mockResolvedValue(filteredStudents);
 
     const result = await getStudentsUseCase.execute(filter);
@@ -56,7 +56,7 @@ describe('GetStudentsUseCase', () => {
 
   it('should filter students by className', async () => {
     const filter = { className: '10A' };
-    const filteredStudents = [mockStudents[0]!];
+    const filteredStudents = [mockStudents[0]];
     mockStudentRepository.findAll.mockResolvedValue(filteredStudents);
 
     const result = await getStudentsUseCase.execute(filter);

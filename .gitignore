@@ -27,3 +27,6 @@ backend/prisma/dev.db-journal
 Thumbs.db
 *.zip
 *.log
+tes-deploy/
+scratch/
+**/scratch/

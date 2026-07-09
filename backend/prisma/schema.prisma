@@ -16,7 +16,6 @@ generator client {
 enum Role {
   SUPER_ADMIN
   UNIT_ADMIN
-  WALI_KELAS
   PARENT
 }
 
@@ -29,13 +28,11 @@ enum InvoiceType {
   SPP
   EKSTRAKURIKULER
   KEGIATAN
-  UANG_PENGEMBANGAN
   LAINNYA
 }
 
 enum InvoiceStatus {
   PENDING
-  PARTIALLY_PAID
   PAID
   VOID
 }
@@ -66,14 +63,13 @@ model SchoolUnit {
 
 model User {
   id           Int         @id @default(autoincrement())
-  name         String
-  email        String?     @unique
-  phoneNumber  String      @unique @map("phone_number")
-  password     String
+  name         String      
+  email        String      @unique 
+  phoneNumber  String?     @unique @map("phone_number") 
+  password     String      
   role         Role
-  schoolUnitId Int?
+  schoolUnitId Int?        @map("school_unit_id")
   schoolUnit   SchoolUnit?   @relation(fields: [schoolUnitId], references: [id])
-  className    String?     @map("class_name")
   transactions Transaction[] @relation("RecorderToTransactions")
   students     Student[]     @relation("ParentToStudents")
 
@@ -98,13 +94,12 @@ model SppTariff {
 model Student {
   id                 Int         @id @default(autoincrement())
   studentNumber      String      @unique @map("student_number") // NIS / Nomor Induk Siswa
-  name               String
-  className          String      @map("class_name")
+  name               String      
+  className          String      @map("class_name") 
   schoolUnitId       Int         @map("school_unit_id")
   parentId           Int         @map("parent_id")
   enrollmentYear     Int         @map("enrollment_year") // Tahun angkatan masuk
   discountPercentage Int         @default(0) @map("discount_percentage") // Persentase diskon (0-100)
-  birthDate          String?     @map("birth_date")
 
   // Relasi
   // Restrict mencegah penghapusan unit/parent jika masih ada data siswa aktif yang terikat dengannya
@@ -117,7 +112,7 @@ model Student {
 
 model Category {
   id           Int          @id @default(autoincrement())
-  name         String        // Contoh: "BOS", "SPP", "Gaji Guru", "Operasional"
+  name         String       // Contoh: "BOS", "SPP", "Gaji Guru", "Operasional"
   type         CategoryType
   schoolUnitId Int?         @map("school_unit_id") // Nullable jika kategori ini bersifat global (bisa dipakai semua unit)
 
@@ -142,7 +137,7 @@ model Invoice {
   discountApplied Int           @map("discount_applied") // Hasil hitung potongan dalam rupiah
   amount          Int // Bersih akhir yang harus dibayarkan siswa (baseAmount - discountApplied)
   status          InvoiceStatus @default(PENDING)
-  midtransOrderId String?       @unique @map("midtrans_order_id")
+  midtransOrderId String?       @unique @map("midtrans_order_id") 
 
   // Relasi
   student      Student       @relation(fields: [studentId], references: [id], onDelete: Restrict)
@@ -161,7 +156,7 @@ model Transaction {
   invoiceId     Int?          @map("invoice_id") // Nullable, terisi hanya jika transaksi ini adalah pelunasan tagihan SPP
   paymentMethod PaymentMethod @map("payment_method")
   amount        Int // Nominal uang masuk/keluar. (Ganti BigInt jika kalkulasi akumulasi Anda melewati 2.1 miliar)
-  description   String?
+  description   String?       
   schoolUnitId  Int           @map("school_unit_id")
   recordedById  Int?          @map("recorded_by_id") // Nullable, kosong jika sistem otomatis (seperti webhook Midtrans)
 

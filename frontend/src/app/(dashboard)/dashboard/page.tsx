@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import { api } from "@/lib/api";
 import {
@@ -510,7 +510,7 @@ export default function DashboardPage() {
                   </p>
                 </div>
                 <Link
-                  href="/transactions"
+                  to="/transactions"
                   className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-0.5"
                 >
                   <span>Detail</span>
@@ -744,7 +744,7 @@ export default function DashboardPage() {
               return (
                 <Link
                   key={item.name}
-                  href={item.href}
+                  to={item.href}
                   className="bg-slate-900/40 hover:bg-slate-800/35 border border-slate-800/80 hover:border-indigo-500/25 p-5 rounded-xl transition-all group flex flex-col justify-between h-36"
                 >
                   <div className="flex items-start justify-between">

@@ -19,7 +19,7 @@ describe('LoginUseCase', () => {
     const email = 'test@example.com';
     const password = 'password123';
     const hashedPassword = 'hashedPassword';
-    const user = new User(1, 'Test User', email, '08123456789', hashedPassword, 'SUPER_ADMIN', null);
+    const user = new User(1, 'Test User', email, '08123456789', hashedPassword, 'ADMIN', null);
 
     mockUserRepository.findByEmail.mockResolvedValue(user);
     mockPasswordHasher.compare.mockResolvedValue(true);
@@ -35,7 +35,7 @@ describe('LoginUseCase', () => {
     const phoneNumber = '08123456789';
     const password = 'password123';
     const hashedPassword = 'hashedPassword';
-    const user = new User(1, 'Test User', 'test@example.com', phoneNumber, hashedPassword, 'SUPER_ADMIN', null);
+    const user = new User(1, 'Test User', 'test@example.com', phoneNumber, hashedPassword, 'ADMIN', null);
 
     mockUserRepository.findByPhoneNumber.mockResolvedValue(user);
     mockPasswordHasher.compare.mockResolvedValue(true);
@@ -53,7 +53,7 @@ describe('LoginUseCase', () => {
   });
 
   it('should throw error if password incorrect', async () => {
-    const user = new User(1, 'Test User', 'test@example.com', '08123456789', 'hashed', 'SUPER_ADMIN', null);
+    const user = new User(1, 'Test User', 'test@example.com', '08123456789', 'hashed', 'ADMIN', null);
     mockUserRepository.findByEmail.mockResolvedValue(user);
     mockPasswordHasher.compare.mockResolvedValue(false);
 

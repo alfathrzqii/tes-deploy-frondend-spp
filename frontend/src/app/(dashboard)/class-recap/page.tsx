@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import {
   Calendar,
@@ -51,7 +51,7 @@ const SCHOOL_UNITS = [
 
 export default function ClassRecapPage() {
   const { user } = useAuthStore();
-  const router = useRouter();
+  const navigate = useNavigate();
   const [recapData, setRecapData] = useState<ClassRecap[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +133,7 @@ export default function ClassRecapPage() {
   // Navigate to detailed unpaid list prefilled for that class
   const handleViewClassDetail = (className: string, schoolUnitId: number) => {
     // Save filters to session storage or pass via router query
-    router.push(`/unpaid?schoolUnitId=${schoolUnitId}&className=${encodeURIComponent(className)}`);
+    navigate(`/unpaid?schoolUnitId=${schoolUnitId}&className=${encodeURIComponent(className)}`);
   };
 
   return (

@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import { KeyRound, Phone, AlertCircle, Eye, EyeOff } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
 
 function LoginForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, isAuthenticated, error, clearError, loading } = useAuthStore();
 
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -22,9 +21,9 @@ function LoginForm() {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace(redirectUrl);
+      navigate(redirectUrl, { replace: true });
     }
-  }, [isAuthenticated, router, redirectUrl]);
+  }, [isAuthenticated, navigate, redirectUrl]);
 
   // Clear errors on mount or values change
   useEffect(() => {
@@ -146,7 +145,7 @@ function LoginForm() {
 
         <div className="mt-4 text-center">
           <Link
-            href="/cek-tagihan"
+            to="/cek-tagihan"
             className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold tracking-wide transition-all border-b border-dashed border-indigo-500/30 hover:border-indigo-400 pb-0.5"
           >
             Cek Tagihan & Bayar SPP Online (Tanpa Login) →

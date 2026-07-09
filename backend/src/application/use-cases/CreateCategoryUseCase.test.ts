@@ -17,7 +17,7 @@ describe('CreateCategoryUseCase', () => {
   it('should create a category successfully', async () => {
     const categoryData = {
       name: 'Monthly Tuition',
-      type: 'INCOME' as const,
+      type: 'MONTHLY' as const,
       schoolUnitId: 1,
     };
 
@@ -40,7 +40,7 @@ describe('CreateCategoryUseCase', () => {
   it('should throw an error if repository fails', async () => {
     const categoryData = {
       name: 'Monthly Tuition',
-      type: 'INCOME' as const,
+      type: 'MONTHLY' as const,
       schoolUnitId: 1,
     };
 

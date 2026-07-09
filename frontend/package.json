@@ -2,24 +2,19 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev -p 3001",
-    "build": "prisma generate && next build",
-    "start": "next start",
+    "dev": "vite --port 3001",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
     "lint": "eslint"
   },
   "dependencies": {
-    "@prisma/client": "^6.8.0",
-    "@types/bcryptjs": "^2.4.6",
-    "@types/jsonwebtoken": "^9.0.10",
     "axios": "^1.17.0",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.17.0",
-    "next": "16.2.7",
-    "prisma": "^6.8.0",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^6.22.3",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
@@ -27,13 +22,10 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.2.1",
     "eslint": "^9",
-    "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",
-    "tsx": "^4.19.2",
-    "typescript": "^5"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "typescript": "^5",
+    "vite": "^5.1.4"
   }
 }

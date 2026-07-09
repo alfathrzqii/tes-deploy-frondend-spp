@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 
 interface RouteGuardProps {
@@ -10,8 +10,9 @@ interface RouteGuardProps {
 }
 
 export default function RouteGuard({ children, allowedRoles }: RouteGuardProps) {
-  const router = useRouter();
-  const pathname = usePathname();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
   const { user, isAuthenticated, loading, fetchMe } = useAuthStore();
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export default function RouteGuard({ children, allowedRoles }: RouteGuardProps) 
       // If user is still not authenticated, redirect to login page
       if (!currentUser) {
         if (pathname !== "/login") {
-          router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
+          navigate(`/login?redirect=${encodeURIComponent(pathname)}`, { replace: true });
         }
         return;
       }
@@ -34,12 +35,12 @@ export default function RouteGuard({ children, allowedRoles }: RouteGuardProps) 
       // If user is authenticated but doesn't have the required role, redirect to dashboard root
       if (allowedRoles && !allowedRoles.includes(currentUser.role)) {
         console.warn(`User does not have access permission: ${currentUser.role}`);
-        router.replace("/dashboard");
+        navigate("/dashboard", { replace: true });
       }
     };
 
     checkAuth();
-  }, [user, fetchMe, router, pathname, allowedRoles]);
+  }, [user, fetchMe, navigate, pathname, allowedRoles]);
 
   // Premium glassmorphism loading state
   if (loading || (!isAuthenticated && pathname !== "/login")) {
