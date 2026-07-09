@@ -1,32 +1,43 @@
-# Dependencies
-**/node_modules/
-node_modules/
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Production/Build outputs
-**/dist/
-**/.next/
-dist/
-.next/
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-# Environments and Secrets
-**/.env
-**/.env.local
-.env
-.env.local
+# testing
+/coverage
 
-# Databases
-**/prisma/*.db
-**/prisma/*.db-journal
-**/dev.db
-**/dev.db-journal
-backend/prisma/dev.db
-backend/prisma/dev.db-journal
+# production
+/dist
+/build
 
-# Temporary/System files
+# misc
 .DS_Store
-Thumbs.db
-*.zip
-*.log
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# local folders
 tes-deploy/
 scratch/
 **/scratch/
