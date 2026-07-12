@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Default state: Light mode colors for slate override */
+html:not(.dark) {
+  --color-slate-550: #475569;
+  --color-slate-50: #0f172a;
+  --color-slate-100: #0f172a; /* Darker headings */
+  --color-slate-200: #1e293b; /* Darker subtitles */
+  --color-slate-300: #334155; /* Darker text */
+  --color-slate-400: #475569; /* Darker secondary labels */
+  --color-slate-500: #64748b; /* Darker muted text */
+  --color-slate-650: #64748b;
+  --color-slate-600: #94a3b8;
+  --color-slate-700: #cbd5e1;
+  --color-slate-800: #cbd5e1; /* Darker border color for clear lines */
+  --color-slate-850: #e2e8f0; /* Lighter border line */
+  --color-slate-900: #ffffff;
+  --color-slate-950: #f8fafc;
+  
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+/* Dark mode colors for slate override */
+html.dark {
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-650: #475569;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-850: #131e35;
+  --color-slate-900: #0f172a;
+  --color-slate-950: #020617;
+  
+  --background: #020617;
+  --foreground: #f8fafc;
+}
+
+/* Dynamic contrast rule for text-white on light backgrounds */
+html:not(.dark) .text-white {
+  color: #0f172a !important;
+}
+
+/* Exclude colored elements (buttons, badges, gradients, states) from text-white override */
+html:not(.dark) button.text-white,
+html:not(.dark) a.text-white,
+html:not(.dark) .bg-indigo-500 .text-white,
+html:not(.dark) .bg-indigo-600 .text-white,
+html:not(.dark) .bg-emerald-500 .text-white,
+html:not(.dark) .bg-emerald-600 .text-white,
+html:not(.dark) .bg-red-500 .text-white,
+html:not(.dark) .bg-amber-500 .text-white,
+html:not(.dark) .bg-violet-600 .text-white,
+html:not(.dark) [class*="from-indigo-"].bg-gradient-to-tr .text-white,
+html:not(.dark) [class*="from-indigo-"].bg-gradient-to-r .text-white,
+html:not(.dark) .bg-indigo-600 *,
+html:not(.dark) .bg-indigo-500 *,
+html:not(.dark) .bg-emerald-500 *,
+html:not(.dark) [class*="from-indigo-"].bg-gradient-to-tr *,
+html:not(.dark) [class*="from-indigo-"].bg-gradient-to-r * {
+  color: #ffffff !important;
+}
+
+/* Ensure background gradients don't overlap awkwardly in light mode */
+html:not(.dark) .bg-indigo-600\/5,
+html:not(.dark) .bg-violet-600\/5,
+html:not(.dark) .bg-indigo-500\/10,
+html:not(.dark) .bg-violet-600\/10 {
+  opacity: 0.25;
+}
+
+/* Highlight text colors contrast adjustment in light mode */
+html:not(.dark) .text-indigo-400,
+html:not(.dark) .text-indigo-450 {
+  color: #4f46e5 !important; /* indigo-600 */
+}
+
+html:not(.dark) .text-emerald-400,
+html:not(.dark) .text-emerald-450 {
+  color: #059669 !important; /* emerald-600 */
+}
+
+html:not(.dark) .text-rose-400 {
+  color: #dc2626 !important; /* rose-600 */
+}
+
+html:not(.dark) .text-amber-400 {
+  color: #d97706 !important; /* amber-600 */
+}
+
