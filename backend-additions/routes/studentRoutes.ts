@@ -189,7 +189,6 @@ router.post(
                   schoolUnitId,
                   enrollmentYear,
                   discountPercentage,
-                  birthDate: birthDate || null,
                   parentId: parentUser.id,
                 },
               });
@@ -202,7 +201,6 @@ router.post(
                   schoolUnitId,
                   enrollmentYear,
                   discountPercentage,
-                  birthDate: birthDate || null,
                   parentId: parentUser.id,
                 },
               });

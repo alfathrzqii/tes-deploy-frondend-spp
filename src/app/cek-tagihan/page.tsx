@@ -79,7 +79,7 @@ export default function CekTagihanPage() {
   // Midtrans Snap Modal State
   const [snapOpen, setSnapOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"gopay" | "va_mandiri" | "va_bca" | "qris">("qris");
+  const [paymentMethod, setPaymentMethod] = useState<"gopay" | "va_mandiri" | "va_bca" | "qris" | "tf_manual">("qris");
   const [vaNumber] = useState(() => `89022${Math.floor(1000000000 + Math.random() * 9000000000)}`);
   const [copied, setCopied] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
@@ -193,6 +193,30 @@ export default function CekTagihanPage() {
     } finally {
       setProcessingPayment(false);
     }
+  };
+
+  const getWhatsAppLink = () => {
+    if (!selectedInvoice) return "#";
+    const studentName = student?.name || "Siswa";
+    const nis = student?.studentNumber || studentNumber;
+    const monthName = INDONESIAN_MONTHS[selectedInvoice.month];
+    const year = selectedInvoice.year;
+    const amountStr = formatRupiah(selectedInvoice.amount);
+
+    const message = `Halo Admin, saya ingin mengonfirmasi pembayaran SPP secara manual.\n\n` +
+      `*Rincian Tagihan:*\n` +
+      `- *Nama Siswa:* ${studentName}\n` +
+      `- *NIS:* ${nis}\n` +
+      `- *Bulan:* ${monthName} ${year}\n` +
+      `- *Nominal:* ${amountStr}\n\n` +
+      `Berikut saya lampirkan bukti transfer. Terima kasih.`;
+
+    return `https://wa.me/6285741660007?text=${encodeURIComponent(message)}`;
+  };
+
+  const handleWhatsAppRedirect = async () => {
+    window.open(getWhatsAppLink(), "_blank");
+    await handleSimulatePayment();
   };
 
   const copyToClipboard = (text: string) => {
@@ -487,7 +511,9 @@ export default function CekTagihanPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Metode</span>
-                    <span className="font-bold text-indigo-600 uppercase">{paymentMethod.replace("_", " ")}</span>
+                    <span className="font-bold text-indigo-600 uppercase">
+                      {paymentMethod === "tf_manual" ? "Transfer Manual (BSI)" : paymentMethod.replace("_", " ")}
+                    </span>
                   </div>
                   <div className="flex justify-between border-t border-slate-200/80 pt-2 font-bold text-slate-800 text-sm">
                     <span>Jumlah</span>
@@ -576,6 +602,19 @@ export default function CekTagihanPage() {
                       <Wallet className="w-5 h-5" />
                       <span className="text-xs font-bold">GoPay Instant</span>
                     </button>
+
+                    {/* Transfer Manual BSI */}
+                    <button
+                      onClick={() => setPaymentMethod("tf_manual")}
+                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer col-span-2 ${
+                        paymentMethod === "tf_manual"
+                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
+                          : "border-slate-100 hover:border-slate-300 text-slate-655 bg-slate-50/30"
+                      }`}
+                    >
+                      <Building2 className="w-5 h-5" />
+                      <span className="text-xs font-bold">Transfer Manual (BSI)</span>
+                    </button>
                   </div>
 
                   {/* Payment Details Container */}
@@ -616,6 +655,46 @@ export default function CekTagihanPage() {
                           Gunakan kode di atas sebagai nomor Rekening Tujuan/Virtual Account untuk pembayaran SPP.
                         </p>
                       </div>
+                    ) : paymentMethod === "tf_manual" ? (
+                      <div className="space-y-2.5 text-xs text-slate-700">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                          Rekening Transfer Manual
+                        </span>
+                        <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
+                          <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                            <span className="text-slate-400">Bank</span>
+                            <span className="font-bold text-slate-800">BSI (Bank Syariah Indonesia)</span>
+                          </div>
+                          <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                            <span className="text-slate-400">Nomor Rekening</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-slate-800 tracking-wide">
+                                7356970432
+                              </span>
+                              <button
+                                onClick={() => copyToClipboard("7356970432")}
+                                className="text-indigo-600 hover:text-indigo-800 p-1 flex items-center gap-0.5 cursor-pointer"
+                              >
+                                {copied ? (
+                                  <Check className="w-3.5 h-3.5" />
+                                ) : (
+                                  <>
+                                    <Copy className="w-3.5 h-3.5" />
+                                    <span className="text-[10px] font-semibold">Salin</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-400">Atas Nama</span>
+                            <span className="font-bold text-slate-800">Yayasan Al-Uswah</span>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-normal">
+                          Silakan transfer sesuai nominal ke rekening BSI di atas. Setelah transfer, klik tombol di bawah untuk mengirimkan bukti transfer via WhatsApp ke nomor +62 857-4166-0007.
+                        </p>
+                      </div>
                     ) : (
                       <div className="text-xs text-slate-700 py-2 space-y-1">
                         <p className="font-semibold text-slate-800">GoPay Instant Checkout</p>
@@ -629,22 +708,41 @@ export default function CekTagihanPage() {
 
                 {/* Footer Pay Button */}
                 <div className="px-6 py-5 bg-slate-50 border-t border-slate-100">
-                  <button
-                    onClick={handleSimulatePayment}
-                    disabled={processingPayment}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm py-3.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-                  >
-                    {processingPayment ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Memproses Pembayaran...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Simulasikan Bayar Lunas</span>
-                      </>
-                    )}
-                  </button>
+                  {paymentMethod === "tf_manual" ? (
+                    <button
+                      onClick={handleWhatsAppRedirect}
+                      disabled={processingPayment}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm py-3.5 rounded-xl transition-all shadow-md shadow-emerald-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                    >
+                      {processingPayment ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Mengirim & Mengonfirmasi...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Kirim Bukti & Konfirmasi via WhatsApp</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSimulatePayment}
+                      disabled={processingPayment}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm py-3.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                    >
+                      {processingPayment ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Memproses Pembayaran...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Simulasikan Bayar Lunas</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             )}

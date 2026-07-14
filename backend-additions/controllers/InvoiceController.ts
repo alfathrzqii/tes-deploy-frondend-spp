@@ -73,7 +73,7 @@ export class InvoiceController {
         where,
         include: {
           schoolUnit: { select: { name: true } },
-          parent: { select: { name: true, phoneNumber: true } },
+          parent: { select: { name: true, phoneNumber: true, email: true } },
         },
         orderBy: { name: "asc" },
       });
@@ -107,15 +107,28 @@ export class InvoiceController {
 
         let totalUnpaidMonths = 0;
         let totalUnpaidAmount = 0;
+        const unpaidMonthsList = [];
 
         for (let m = 1; m <= upToMonth; m++) {
           const inv = dbInvoices.find((i) => i.month === m);
           if (!inv) {
             totalUnpaidMonths++;
             totalUnpaidAmount += netAmount;
+            unpaidMonthsList.push({
+              month: m,
+              status: "PENDING",
+              totalAmount: netAmount,
+              unpaidAmount: netAmount,
+            });
           } else if ((inv.status as any) === "PENDING") {
             totalUnpaidMonths++;
             totalUnpaidAmount += inv.amount;
+            unpaidMonthsList.push({
+              month: m,
+              status: "PENDING",
+              totalAmount: inv.amount,
+              unpaidAmount: inv.amount,
+            });
           } else if ((inv.status as any) === "PARTIALLY_PAID") {
             const txSum = await prisma.transaction.aggregate({
               where: { invoiceId: inv.id, type: "INCOME" as any },
@@ -126,29 +139,58 @@ export class InvoiceController {
             if (unpaidPart > 0) {
               totalUnpaidMonths++;
               totalUnpaidAmount += unpaidPart;
+              unpaidMonthsList.push({
+                month: m,
+                status: "PARTIALLY_PAID",
+                totalAmount: inv.amount,
+                unpaidAmount: unpaidPart,
+              });
             }
           }
         }
 
         if (totalUnpaidMonths > 0) {
           unpaidList.push({
-            studentId: student.id,
+            id: student.id,
             studentNumber: student.studentNumber,
             name: student.name,
             className: student.className,
-            schoolUnit: student.schoolUnit.name,
+            schoolUnitId: student.schoolUnitId,
+            schoolUnitName: student.schoolUnit.name,
             parentName: student.parent?.name || "-",
-            parentPhone: student.parent?.phoneNumber || "-",
-            unpaidMonthsCount: totalUnpaidMonths,
+            parentPhoneNumber: student.parent?.phoneNumber || "-",
+            parentEmail: student.parent?.email || null,
+            unpaidMonths: unpaidMonthsList,
             totalUnpaidAmount,
+            totalUnpaidCount: totalUnpaidMonths,
           });
         }
       }
 
+      let grandTotalUnpaidAmount = 0;
+      let grandTotalUnpaidMonthsCount = 0;
+      let totalStudentsUnpaidCount = 0;
+
+      for (const item of unpaidList) {
+        grandTotalUnpaidAmount += item.totalUnpaidAmount;
+        grandTotalUnpaidMonthsCount += item.unpaidMonths.length;
+        totalStudentsUnpaidCount++;
+      }
+
+      const summary = {
+        grandTotalUnpaidAmount,
+        grandTotalUnpaidMonthsCount,
+        totalStudentsCount: students.length,
+        totalStudentsUnpaidCount,
+      };
+
       res.status(200).json({
         success: true,
         message: "Laporan tunggakan SPP berhasil diambil",
-        data: unpaidList,
+        data: {
+          unpaidList,
+          summary,
+        },
       });
     } catch (error) {
       next(error);
@@ -289,7 +331,7 @@ export class InvoiceController {
 
   async getStudentInvoices(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const user = req.user!;
+      const user = req.user;
       const studentNumber = req.params["studentNumber"] as string;
       const year = req.query.year ? Number(req.query.year) : new Date().getFullYear();
 
@@ -311,30 +353,32 @@ export class InvoiceController {
         return;
       }
 
-      if ((user.role as any) === "PARENT") {
-        if (student.parentId !== user.id) {
-          res.status(403).json({ success: false, message: "Akses ditolak: Anda hanya diizinkan melihat tagihan anak Anda sendiri" });
-          return;
-        }
-      } else if ((user.role as any) === "WALI_KELAS") {
-        let userClassName: string | null = null;
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { className: true } as any,
-        });
-        userClassName = (dbUser as any)?.className || null;
+      if (user) {
+        if ((user.role as any) === "PARENT") {
+          if (student.parentId !== user.id) {
+            res.status(403).json({ success: false, message: "Akses ditolak: Anda hanya diizinkan melihat tagihan anak Anda sendiri" });
+            return;
+          }
+        } else if ((user.role as any) === "WALI_KELAS") {
+          let userClassName: string | null = null;
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { className: true } as any,
+          });
+          userClassName = (dbUser as any)?.className || null;
 
-        if (
-          student.schoolUnitId !== user.schoolUnitId ||
-          student.className !== userClassName
-        ) {
-          res.status(403).json({ success: false, message: "Akses ditolak: Anda hanya diizinkan melihat tagihan siswa kelas bimbingan Anda" });
-          return;
-        }
-      } else if ((user.role as any) === "UNIT_ADMIN") {
-        if (student.schoolUnitId !== user.schoolUnitId) {
-          res.status(403).json({ success: false, message: "Akses ditolak: Anda hanya diizinkan melihat tagihan siswa unit sekolah Anda" });
-          return;
+          if (
+            student.schoolUnitId !== user.schoolUnitId ||
+            student.className !== userClassName
+          ) {
+            res.status(403).json({ success: false, message: "Akses ditolak: Anda hanya diizinkan melihat tagihan siswa kelas bimbingan Anda" });
+            return;
+          }
+        } else if ((user.role as any) === "UNIT_ADMIN") {
+          if (student.schoolUnitId !== user.schoolUnitId) {
+            res.status(403).json({ success: false, message: "Akses ditolak: Anda hanya diizinkan melihat tagihan siswa unit sekolah Anda" });
+            return;
+          }
         }
       }
 

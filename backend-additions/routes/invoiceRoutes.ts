@@ -53,7 +53,6 @@ router.get(
 
 router.get(
   "/student/:studentNumber",
-  authMiddleware,
   invoiceController.getStudentInvoices.bind(invoiceController)
 );
 
