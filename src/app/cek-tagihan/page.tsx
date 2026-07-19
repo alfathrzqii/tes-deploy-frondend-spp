@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -76,14 +76,19 @@ export default function CekTagihanPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [error, setError] = useState("");
 
-  // Midtrans Snap Modal State
+  // Midtrans Snap Modal State (Pakasir Integration)
   const [snapOpen, setSnapOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"gopay" | "va_mandiri" | "va_bca" | "qris" | "tf_manual">("qris");
+  const [paymentMethod, setPaymentMethod] = useState<"qris" | "bni_va" | "bri_va" | "cimb_niaga_va" | "tf_manual">("qris");
   const [vaNumber] = useState(() => `89022${Math.floor(1000000000 + Math.random() * 9000000000)}`);
   const [copied, setCopied] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
+
+  // Pakasir specific states
+  const [pakasirLoading, setPakasirLoading] = useState(false);
+  const [pakasirData, setPakasirData] = useState<any>(null);
+  const [realVaNumber, setRealVaNumber] = useState("");
 
   const formatRupiah = (value: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -150,12 +155,151 @@ export default function CekTagihanPage() {
     }
   };
 
+  const fetchPakasirTransaction = async (method: string, invoice: Invoice) => {
+    if (method === "tf_manual") {
+      setPakasirData(null);
+      return;
+    }
+    setPakasirLoading(true);
+    try {
+      const response = await api.post("/invoices/pakasir/create", {
+        studentNumber: student?.studentNumber || studentNumber,
+        month: invoice.month,
+        year: invoice.year,
+        paymentMethod: method,
+      });
+
+      if (response.data.success) {
+        setPakasirData(response.data.data);
+        if (method !== "qris") {
+          setRealVaNumber(response.data.data.payment.payment_number);
+        }
+      } else {
+        alert(response.data.message || "Gagal membuat pembayaran");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.message || "Gagal memproses pembayaran");
+    } finally {
+      setPakasirLoading(false);
+    }
+  };
+
   const handleOpenSnap = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     setSnapOpen(true);
     setPaymentSuccess(false);
     setProcessingPayment(false);
+    setPakasirData(null);
+    setRealVaNumber("");
+    setPaymentMethod("qris");
+    fetchPakasirTransaction("qris", invoice);
   };
+
+  const handlePaymentMethodChange = (newMethod: "qris" | "bni_va" | "bri_va" | "cimb_niaga_va" | "tf_manual") => {
+    setPaymentMethod(newMethod);
+    if (selectedInvoice) {
+      fetchPakasirTransaction(newMethod, selectedInvoice);
+    }
+  };
+
+  const handleCheckStatusManual = async () => {
+    if (!pakasirData) return;
+    setProcessingPayment(true);
+    try {
+      const response = await api.get(
+        `/invoices/pakasir/status?order_id=${pakasirData.orderId}&amount=${pakasirData.amount}`
+      );
+      if (response.data.success && response.data.status === "completed") {
+        setPaymentSuccess(true);
+        if (selectedInvoice) {
+          const updatedInvoices = invoices.map((inv) => {
+            if (inv.month === selectedInvoice.month && inv.year === selectedInvoice.year) {
+              return {
+                ...inv,
+                status: "PAID" as const,
+                midtransOrderId: pakasirData.orderId,
+              };
+            }
+            return inv;
+          });
+          setInvoices(updatedInvoices);
+        }
+      } else {
+        alert("Pembayaran belum terdeteksi. Silakan lakukan pembayaran terlebih dahulu.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.message || "Gagal memeriksa status pembayaran");
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  const handleSimulatePakasirPayment = async () => {
+    if (!pakasirData) return;
+    setProcessingPayment(true);
+    try {
+      const response = await api.post("/invoices/pakasir/simulate", {
+        orderId: pakasirData.orderId,
+        amount: pakasirData.amount,
+      });
+
+      if (response.data.success) {
+        await handleCheckStatusManual();
+      } else {
+        alert(response.data.message || "Gagal memicu simulasi lunas");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.message || "Gagal memicu simulasi lunas");
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  // Polling status Pakasir
+  useEffect(() => {
+    let intervalId: any = null;
+
+    if (snapOpen && pakasirData && !paymentSuccess && paymentMethod !== "tf_manual") {
+      const checkStatus = async () => {
+        try {
+          const response = await api.get(
+            `/invoices/pakasir/status?order_id=${pakasirData.orderId}&amount=${pakasirData.amount}`
+          );
+          if (response.data.success && response.data.status === "completed") {
+            setPaymentSuccess(true);
+            if (selectedInvoice) {
+              const updatedInvoices = invoices.map((inv) => {
+                if (inv.month === selectedInvoice.month && inv.year === selectedInvoice.year) {
+                  return {
+                    ...inv,
+                    status: "PAID" as const,
+                    midtransOrderId: pakasirData.orderId,
+                  };
+                }
+                return inv;
+              });
+              setInvoices(updatedInvoices);
+            }
+          }
+        } catch (err) {
+          console.error("Gagal polling status pembayaran:", err);
+        }
+      };
+
+      // Run status check immediately and then every 5 seconds
+      checkStatus();
+      intervalId = setInterval(checkStatus, 5000);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [snapOpen, pakasirData, paymentSuccess, paymentMethod, invoices, selectedInvoice]);
 
   const handleSimulatePayment = async () => {
     if (!selectedInvoice) return;
@@ -540,7 +684,7 @@ export default function CekTagihanPage() {
                     </h5>
                   </div>
                   <span className="font-extrabold text-indigo-700 text-lg">
-                    {formatRupiah(selectedInvoice.amount)}
+                    {pakasirData ? formatRupiah(pakasirData.payment.total_payment) : formatRupiah(selectedInvoice.amount)}
                   </span>
                 </div>
 
@@ -553,7 +697,7 @@ export default function CekTagihanPage() {
                   <div className="grid grid-cols-2 gap-3">
                     {/* QRIS */}
                     <button
-                      onClick={() => setPaymentMethod("qris")}
+                      onClick={() => handlePaymentMethodChange("qris")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "qris"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
@@ -564,48 +708,48 @@ export default function CekTagihanPage() {
                       <span className="text-xs font-bold">QRIS (GoPay/SPay)</span>
                     </button>
 
-                    {/* VA Mandiri */}
+                    {/* BNI VA */}
                     <button
-                      onClick={() => setPaymentMethod("va_mandiri")}
+                      onClick={() => handlePaymentMethodChange("bni_va")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
-                        paymentMethod === "va_mandiri"
+                        paymentMethod === "bni_va"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
                           : "border-slate-100 hover:border-slate-300 text-slate-650 bg-slate-50/30"
                       }`}
                     >
                       <Building2 className="w-5 h-5" />
-                      <span className="text-xs font-bold">Mandiri VA</span>
+                      <span className="text-xs font-bold">BNI VA</span>
                     </button>
 
-                    {/* VA BCA */}
+                    {/* BRI VA */}
                     <button
-                      onClick={() => setPaymentMethod("va_bca")}
+                      onClick={() => handlePaymentMethodChange("bri_va")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
-                        paymentMethod === "va_bca"
+                        paymentMethod === "bri_va"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
                           : "border-slate-100 hover:border-slate-300 text-slate-650 bg-slate-50/30"
                       }`}
                     >
                       <Building2 className="w-5 h-5" />
-                      <span className="text-xs font-bold">BCA VA</span>
+                      <span className="text-xs font-bold">BRI VA</span>
                     </button>
 
-                    {/* ShopeePay/Wallet */}
+                    {/* CIMB VA */}
                     <button
-                      onClick={() => setPaymentMethod("gopay")}
+                      onClick={() => handlePaymentMethodChange("cimb_niaga_va")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
-                        paymentMethod === "gopay"
+                        paymentMethod === "cimb_niaga_va"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
                           : "border-slate-100 hover:border-slate-300 text-slate-650 bg-slate-50/30"
                       }`}
                     >
-                      <Wallet className="w-5 h-5" />
-                      <span className="text-xs font-bold">GoPay Instant</span>
+                      <Building2 className="w-5 h-5" />
+                      <span className="text-xs font-bold">CIMB Niaga VA</span>
                     </button>
 
                     {/* Transfer Manual BSI */}
                     <button
-                      onClick={() => setPaymentMethod("tf_manual")}
+                      onClick={() => handlePaymentMethodChange("tf_manual")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer col-span-2 ${
                         paymentMethod === "tf_manual"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
@@ -618,45 +762,78 @@ export default function CekTagihanPage() {
                   </div>
 
                   {/* Payment Details Container */}
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
-                    {paymentMethod === "qris" ? (
-                      <div className="flex flex-col items-center text-center space-y-2 py-2">
-                        <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
-                          <QrCode className="w-32 h-32 text-slate-800" />
-                        </div>
-                        <p className="text-[10px] text-slate-500">
-                          Pindai kode QR di atas menggunakan aplikasi e-wallet pilihan Anda.
-                        </p>
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 min-h-[140px] flex flex-col justify-center">
+                    {pakasirLoading ? (
+                      <div className="flex flex-col items-center justify-center py-6 space-y-2">
+                        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                        <span className="text-xs text-slate-500 font-medium">Membuat Transaksi Pakasir...</span>
                       </div>
-                    ) : paymentMethod === "va_mandiri" || paymentMethod === "va_bca" ? (
-                      <div className="space-y-2.5 text-xs text-slate-700">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                          Detail Transfer Bank
-                        </span>
-                        <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200">
-                          <span className="font-mono font-bold text-slate-800 text-sm tracking-wide">
-                            {vaNumber}
+                    ) : paymentMethod === "qris" ? (
+                      pakasirData ? (
+                        <div className="flex flex-col items-center text-center space-y-2 py-2 animate-fadeIn">
+                          <div className="p-2.5 bg-white border border-slate-200 rounded-xl shadow-inner">
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(pakasirData.payment.payment_number)}`}
+                              alt="QRIS Pakasir"
+                              className="w-36 h-36"
+                            />
+                          </div>
+                          <p className="text-[10px] text-slate-500">
+                            Pindai kode QRIS di atas menggunakan aplikasi e-wallet pilihan Anda.
+                          </p>
+                          {pakasirData.payment.expired_at && (
+                            <p className="text-[10px] text-red-500 font-bold">
+                              Expired: {new Date(pakasirData.payment.expired_at).toLocaleTimeString("id-ID")}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center text-xs text-red-500 py-4">Gagal memuat QRIS. Silakan pilih metode lain.</div>
+                      )
+                    ) : paymentMethod !== "tf_manual" ? (
+                      pakasirData ? (
+                        <div className="space-y-2.5 text-xs text-slate-700 animate-fadeIn">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                            Detail Virtual Account ({paymentMethod.replace("_va", "").toUpperCase()})
                           </span>
-                          <button
-                            onClick={() => copyToClipboard(vaNumber)}
-                            className="text-indigo-600 hover:text-indigo-800 p-1 flex items-center gap-0.5 cursor-pointer"
-                          >
-                            {copied ? (
-                              <Check className="w-3.5 h-3.5" />
-                            ) : (
-                              <>
-                                <Copy className="w-3.5 h-3.5" />
-                                <span className="text-[10px] font-semibold">Salin</span>
-                              </>
-                            )}
-                          </button>
+                          <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200">
+                            <span className="font-mono font-bold text-slate-800 text-sm tracking-wide">
+                              {realVaNumber}
+                            </span>
+                            <button
+                              onClick={() => copyToClipboard(realVaNumber)}
+                              className="text-indigo-600 hover:text-indigo-800 p-1 flex items-center gap-0.5 cursor-pointer font-bold"
+                            >
+                              {copied ? (
+                                <Check className="w-3.5 h-3.5" />
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  <span className="text-[10px] font-semibold">Salin</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-slate-500 font-medium">
+                            <span>Biaya Layanan</span>
+                            <span>{formatRupiah(pakasirData.payment.fee)}</span>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-slate-500 font-medium border-t border-slate-200/50 pt-1">
+                            <span>Total Pembayaran</span>
+                            <span className="font-bold text-slate-850">{formatRupiah(pakasirData.payment.total_payment)}</span>
+                          </div>
+                          {pakasirData.payment.expired_at && (
+                            <p className="text-[10px] text-red-500 font-bold">
+                              Expired: {new Date(pakasirData.payment.expired_at).toLocaleTimeString("id-ID")}
+                            </p>
+                          )}
                         </div>
-                        <p className="text-[10px] text-slate-500 leading-normal">
-                          Gunakan kode di atas sebagai nomor Rekening Tujuan/Virtual Account untuk pembayaran SPP.
-                        </p>
-                      </div>
-                    ) : paymentMethod === "tf_manual" ? (
-                      <div className="space-y-2.5 text-xs text-slate-700">
+                      ) : (
+                        <div className="text-center text-xs text-red-500 py-4">Gagal memuat Virtual Account. Silakan pilih metode lain.</div>
+                      )
+                    ) : (
+                      /* Transfer Manual BSI */
+                      <div className="space-y-2.5 text-xs text-slate-700 animate-fadeIn">
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
                           Rekening Transfer Manual
                         </span>
@@ -695,19 +872,12 @@ export default function CekTagihanPage() {
                           Silakan transfer sesuai nominal ke rekening BSI di atas. Setelah transfer, klik tombol di bawah untuk mengirimkan bukti transfer via WhatsApp ke nomor +62 857-4166-0007.
                         </p>
                       </div>
-                    ) : (
-                      <div className="text-xs text-slate-700 py-2 space-y-1">
-                        <p className="font-semibold text-slate-800">GoPay Instant Checkout</p>
-                        <p className="text-[10px] text-slate-500">
-                          Klik tombol bayar di bawah untuk membuka aplikasi GoPay di ponsel Anda secara otomatis.
-                        </p>
-                      </div>
                     )}
                   </div>
                 </div>
 
                 {/* Footer Pay Button */}
-                <div className="px-6 py-5 bg-slate-50 border-t border-slate-100">
+                <div className="px-6 py-5 bg-slate-50 border-t border-slate-100 flex flex-col gap-2">
                   {paymentMethod === "tf_manual" ? (
                     <button
                       onClick={handleWhatsAppRedirect}
@@ -726,22 +896,31 @@ export default function CekTagihanPage() {
                       )}
                     </button>
                   ) : (
-                    <button
-                      onClick={handleSimulatePayment}
-                      disabled={processingPayment}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm py-3.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-                    >
-                      {processingPayment ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Memproses Pembayaran...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Simulasikan Bayar Lunas</span>
-                        </>
-                      )}
-                    </button>
+                    <>
+                      <button
+                        onClick={handleCheckStatusManual}
+                        disabled={processingPayment || pakasirLoading || !pakasirData}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm py-3.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                      >
+                        {processingPayment ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Memeriksa Status...</span>
+                          </>
+                        ) : (
+                          <span>Cek Status Pembayaran</span>
+                        )}
+                      </button>
+
+                      {/* Simulasi Sandbox Button */}
+                      <button
+                        onClick={handleSimulatePakasirPayment}
+                        disabled={processingPayment || pakasirLoading || !pakasirData}
+                        className="w-full bg-slate-800 hover:bg-slate-900 text-slate-100 font-semibold text-xs py-2 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-60"
+                      >
+                        Simulasikan Bayar Lunas (Pakasir Sandbox)
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
