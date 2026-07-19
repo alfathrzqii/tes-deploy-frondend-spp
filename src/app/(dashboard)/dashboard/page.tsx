@@ -71,7 +71,7 @@ export default function DashboardPage() {
   const [childrenInvoices, setChildrenInvoices] = useState<Record<string, any>>({});
   const [loadingChildren, setLoadingChildren] = useState(false);
 
-  // Midtrans Snap Modal States for Parent
+  // Pakasir Payment Modal States for Parent
   const [snapOpen, setSnapOpen] = useState(false);
   const [selectedChild, setSelectedChild] = useState<any | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
@@ -80,6 +80,50 @@ export default function DashboardPage() {
   const [copied, setCopied] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [loadingPaymentCode, setLoadingPaymentCode] = useState(false);
+  const [pakasirData, setPakasirData] = useState<any | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  // Map frontend values to backend Pakasir method names
+  const getBackendMethod = (method: string) => {
+    if (method === "va_mandiri") return "mandiri";
+    if (method === "va_bca") return "bca";
+    return method;
+  };
+
+  useEffect(() => {
+    if (!snapOpen || !selectedInvoice || !selectedChild) return;
+
+    const fetchPaymentCode = async () => {
+      setLoadingPaymentCode(true);
+      setPaymentError(null);
+      setPakasirData(null);
+      try {
+        const payload = {
+          studentNumber: selectedChild.studentNumber,
+          month: selectedInvoice.month,
+          year: selectedInvoice.year,
+          paymentMethod: getBackendMethod(paymentMethod),
+        };
+        const response = await api.post("/invoices/pakasir/create", payload);
+        if (response.data.success) {
+          setPakasirData(response.data.data);
+          if (response.data.data?.payment?.payment_number) {
+            setVaNumber(response.data.data.payment.payment_number);
+          }
+        } else {
+          setPaymentError(response.data.message || "Gagal mendapatkan kode pembayaran");
+        }
+      } catch (err: any) {
+        console.error(err);
+        setPaymentError(err.response?.data?.message || "Gagal menghubungi server untuk mendapatkan kode pembayaran");
+      } finally {
+        setLoadingPaymentCode(false);
+      }
+    };
+
+    fetchPaymentCode();
+  }, [snapOpen, paymentMethod, selectedInvoice, selectedChild]);
 
   const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "UNIT_ADMIN";
 
@@ -176,32 +220,39 @@ export default function DashboardPage() {
     setSnapOpen(true);
     setPaymentSuccess(false);
     setProcessingPayment(false);
-    setVaNumber(`89022${Math.floor(1000000000 + Math.random() * 9000000000)}`);
+    setPaymentError(null);
+    setPakasirData(null);
   };
 
   const handleSimulatePayment = async () => {
-    if (!selectedInvoice || !selectedChild) return;
+    if (!selectedInvoice || !selectedChild || !pakasirData) return;
 
     setProcessingPayment(true);
+    setPaymentError(null);
     try {
-      const payload = {
-        studentNumber: selectedChild.studentNumber,
-        month: selectedInvoice.month,
-        year: selectedInvoice.year,
+      const simulatePayload = {
+        orderId: pakasirData.orderId,
+        amount: pakasirData.payment.total_payment || pakasirData.amount,
       };
 
-      const response = await api.post("/invoices/pay-online-simulated", payload);
+      // Call simulation endpoint
+      await api.post("/invoices/pakasir/simulate", simulatePayload);
 
-      if (response.data.success) {
+      // Verify payment status
+      const statusResponse = await api.get(`/invoices/pakasir/status`, {
+        params: { order_id: pakasirData.orderId }
+      });
+
+      if (statusResponse.data.success && statusResponse.data.status === "completed") {
         setPaymentSuccess(true);
         // Reload parent dashboard view
         await loadParentDashboard();
       } else {
-        alert(response.data.message || "Gagal memproses pembayaran");
+        setPaymentError(statusResponse.data.message || "Status pembayaran belum selesai");
       }
     } catch (err: any) {
       console.error(err);
-      alert(err.response?.data?.message || "Gagal memproses simulasi pembayaran");
+      setPaymentError(err.response?.data?.message || "Gagal memproses simulasi pembayaran");
     } finally {
       setProcessingPayment(false);
     }
@@ -768,19 +819,19 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Midtrans Snap Modal Overlay for Parents */}
+            {/* Pakasir Payment Modal Overlay for Parents */}
       {snapOpen && selectedInvoice && selectedChild && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-fade-in text-xs text-slate-800">
           <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col relative animate-scaleUp">
             
-            {/* Header: Midtrans Logo & Close */}
+            {/* Header: Pakasir Logo & Close */}
             <div className="bg-slate-50 px-6 py-5 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <span className="text-[9px] uppercase font-bold tracking-widest text-slate-400 block mb-0.5">
-                  SIMULASI SNAP GATEWAY
+                  SIMULASI PEMBAYARAN ONLINE
                 </span>
                 <h3 className="font-extrabold text-indigo-600 text-base flex items-center gap-1">
-                  midtrans <span className="text-slate-500 font-light text-[11px] border border-slate-350 px-1 py-0.2 rounded ml-1">Simulasi</span>
+                  pakasir <span className="text-slate-500 font-light text-[11px] border border-slate-350 px-1 py-0.2 rounded ml-1">Simulasi</span>
                 </h3>
               </div>
               <button
@@ -795,19 +846,19 @@ export default function DashboardPage() {
             {paymentSuccess ? (
               /* Success screen */
               <div className="p-8 flex flex-col items-center justify-center text-center animate-fade-in">
-                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-650 border-2 border-emerald-400 mb-6">
+                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-655 border-2 border-emerald-400 mb-6">
                   <Check className="w-7 h-7 stroke-[3]" />
                 </div>
                 <h4 className="font-extrabold text-lg text-slate-900">Pembayaran Berhasil!</h4>
-                <p className="text-[11px] text-slate-505 mt-2 max-w-xs leading-normal">
+                <p className="text-[11px] text-slate-555 mt-2 max-w-xs leading-normal">
                   Pembayaran SPP bulan {MONTHS.find((m) => m.value === selectedInvoice.month)?.name} {selectedInvoice.year} untuk <b>{selectedChild.name}</b> telah sukses terverifikasi.
                 </p>
 
                 <div className="w-full bg-slate-50 rounded-xl p-4 my-5 text-left border border-slate-100 space-y-2 text-[10px]">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Order ID</span>
-                    <span className="font-mono font-medium text-slate-700">
-                      {selectedInvoice.midtransOrderId || "MOCK-MIDTRANS"}
+                    <span className="font-mono font-medium text-slate-700 text-[9px] break-all select-all">
+                      {pakasirData?.orderId || "MOCK-PAKASIR"}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -818,9 +869,15 @@ export default function DashboardPage() {
                     <span className="text-slate-400">Metode</span>
                     <span className="font-bold text-indigo-650 uppercase">{paymentMethod.replace("_", " ")}</span>
                   </div>
+                  {pakasirData?.payment?.fee > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Biaya Layanan</span>
+                      <span className="font-medium text-slate-700">{formatRupiah(pakasirData.payment.fee)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-800 text-xs">
                     <span>Jumlah Bayar</span>
-                    <span>{formatRupiah(selectedInvoice.amount)}</span>
+                    <span>{formatRupiah(pakasirData?.payment?.total_payment || selectedInvoice.amount)}</span>
                   </div>
                 </div>
 
@@ -837,13 +894,13 @@ export default function DashboardPage() {
                 {/* Total Billing Info */}
                 <div className="bg-indigo-50/70 px-6 py-4 flex items-center justify-between border-b border-indigo-100">
                   <div className="text-[11px]">
-                    <span className="text-slate-500">Tagihan SPP</span>
+                    <span className="text-slate-555">Tagihan SPP</span>
                     <h5 className="font-extrabold text-slate-850 text-xs mt-0.5">
                       Bulan {MONTHS.find((m) => m.value === selectedInvoice.month)?.name} {selectedInvoice.year}
                     </h5>
                   </div>
                   <span className="font-extrabold text-indigo-700 text-base">
-                    {formatRupiah(selectedInvoice.amount)}
+                    {formatRupiah(pakasirData?.payment?.total_payment || selectedInvoice.amount)}
                   </span>
                 </div>
 
@@ -859,7 +916,7 @@ export default function DashboardPage() {
                       onClick={() => setPaymentMethod("qris")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "qris"
-                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-750"
+                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-755"
                           : "border-slate-100 hover:border-slate-300 text-slate-655 bg-slate-50/30"
                       }`}
                     >
@@ -872,7 +929,7 @@ export default function DashboardPage() {
                       onClick={() => setPaymentMethod("va_mandiri")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "va_mandiri"
-                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-750"
+                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-755"
                           : "border-slate-100 hover:border-slate-300 text-slate-655 bg-slate-50/30"
                       }`}
                     >
@@ -885,7 +942,7 @@ export default function DashboardPage() {
                       onClick={() => setPaymentMethod("va_bca")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "va_bca"
-                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-750"
+                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-755"
                           : "border-slate-100 hover:border-slate-300 text-slate-655 bg-slate-50/30"
                       }`}
                     >
@@ -898,7 +955,7 @@ export default function DashboardPage() {
                       onClick={() => setPaymentMethod("gopay")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "gopay"
-                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-755"
+                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-750"
                           : "border-slate-100 hover:border-slate-300 text-slate-655 bg-slate-50/30"
                       }`}
                     >
@@ -908,11 +965,28 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Payment Details Container */}
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
-                    {paymentMethod === "qris" ? (
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3 min-h-[100px] flex flex-col justify-center">
+                    {loadingPaymentCode ? (
+                      <div className="flex flex-col items-center justify-center py-4">
+                        <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                        <span className="text-[9px] text-slate-500 mt-2">Mendapatkan kode pembayaran...</span>
+                      </div>
+                    ) : paymentError ? (
+                      <div className="bg-red-50 text-red-650 p-3 rounded-lg text-[9px] font-semibold text-center">
+                        {paymentError}
+                      </div>
+                    ) : paymentMethod === "qris" ? (
                       <div className="flex flex-col items-center text-center space-y-2 py-1">
                         <div className="p-2 bg-white border border-slate-200 rounded-lg">
-                          <QrCode className="w-24 h-24 text-slate-800" />
+                          {vaNumber ? (
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(vaNumber)}`}
+                              alt="QRIS QR Code"
+                              className="w-28 h-28 mx-auto"
+                            />
+                          ) : (
+                            <QrCode className="w-24 h-24 text-slate-800" />
+                          )}
                         </div>
                         <p className="text-[9px] text-slate-555 leading-normal">
                           Pindai kode QR simulasi di atas menggunakan e-wallet Anda.
@@ -925,14 +999,16 @@ export default function DashboardPage() {
                         </span>
                         <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200">
                           <span className="font-mono font-bold text-slate-800 text-xs tracking-wide">
-                            {vaNumber}
+                            {vaNumber || "Memuat..."}
                           </span>
                           <button
+                            type="button"
                             onClick={() => copyToClipboard(vaNumber)}
-                            className="text-indigo-650 hover:text-indigo-850 p-1 flex items-center gap-0.5 cursor-pointer font-bold"
+                            className="text-indigo-655 hover:text-indigo-850 p-1 flex items-center gap-0.5 cursor-pointer font-bold"
+                            disabled={!vaNumber}
                           >
                             {copied ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
+                              <Check className="w-3 h-3 text-emerald-650" />
                             ) : (
                               <>
                                 <Copy className="w-3 h-3" />
@@ -960,7 +1036,7 @@ export default function DashboardPage() {
                 <div className="px-6 py-5 bg-slate-50 border-t border-slate-100">
                   <button
                     onClick={handleSimulatePayment}
-                    disabled={processingPayment}
+                    disabled={processingPayment || loadingPaymentCode || !!paymentError}
                     className="w-full bg-indigo-600 hover:bg-indigo-755 text-white font-extrabold py-3.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                   >
                     {processingPayment ? (

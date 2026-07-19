@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -76,14 +76,58 @@ export default function CekTagihanPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [error, setError] = useState("");
 
-  // Midtrans Snap Modal State
+  // Pakasir Payment Modal State
   const [snapOpen, setSnapOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"gopay" | "va_mandiri" | "va_bca" | "qris">("qris");
-  const [vaNumber] = useState(() => `89022${Math.floor(1000000000 + Math.random() * 9000000000)}`);
+  const [vaNumber, setVaNumber] = useState("");
   const [copied, setCopied] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [loadingPaymentCode, setLoadingPaymentCode] = useState(false);
+  const [pakasirData, setPakasirData] = useState<any | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  // Map frontend values to backend Pakasir method names
+  const getBackendMethod = (method: string) => {
+    if (method === "va_mandiri") return "mandiri";
+    if (method === "va_bca") return "bca";
+    return method;
+  };
+
+  useEffect(() => {
+    if (!snapOpen || !selectedInvoice || !student) return;
+
+    const fetchPaymentCode = async () => {
+      setLoadingPaymentCode(true);
+      setPaymentError(null);
+      setPakasirData(null);
+      try {
+        const payload = {
+          studentNumber: student.studentNumber,
+          month: selectedInvoice.month,
+          year: selectedInvoice.year,
+          paymentMethod: getBackendMethod(paymentMethod),
+        };
+        const response = await api.post("/invoices/pakasir/create", payload);
+        if (response.data.success) {
+          setPakasirData(response.data.data);
+          if (response.data.data?.payment?.payment_number) {
+            setVaNumber(response.data.data.payment.payment_number);
+          }
+        } else {
+          setPaymentError(response.data.message || "Gagal mendapatkan kode pembayaran");
+        }
+      } catch (err: any) {
+        console.error(err);
+        setPaymentError(err.response?.data?.message || "Gagal menghubungi server untuk mendapatkan kode pembayaran");
+      } finally {
+        setLoadingPaymentCode(false);
+      }
+    };
+
+    fetchPaymentCode();
+  }, [snapOpen, paymentMethod, selectedInvoice, student]);
 
   const formatRupiah = (value: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -155,22 +199,30 @@ export default function CekTagihanPage() {
     setSnapOpen(true);
     setPaymentSuccess(false);
     setProcessingPayment(false);
+    setPaymentError(null);
+    setPakasirData(null);
   };
 
   const handleSimulatePayment = async () => {
-    if (!selectedInvoice) return;
+    if (!selectedInvoice || !student || !pakasirData) return;
 
     setProcessingPayment(true);
+    setPaymentError(null);
     try {
-      const payload = {
-        studentNumber: student?.studentNumber || studentNumber,
-        month: selectedInvoice.month,
-        year: selectedInvoice.year,
+      const simulatePayload = {
+        orderId: pakasirData.orderId,
+        amount: pakasirData.payment.total_payment || pakasirData.amount,
       };
 
-      const response = await api.post("/invoices/pay-online-simulated", payload);
+      // Call simulation endpoint
+      await api.post("/invoices/pakasir/simulate", simulatePayload);
 
-      if (response.data.success) {
+      // Verify payment status
+      const statusResponse = await api.get(`/invoices/pakasir/status`, {
+        params: { order_id: pakasirData.orderId }
+      });
+
+      if (statusResponse.data.success && statusResponse.data.status === "completed") {
         setPaymentSuccess(true);
         // Refresh invoice list
         const updatedInvoices = invoices.map((inv) => {
@@ -178,18 +230,18 @@ export default function CekTagihanPage() {
             return {
               ...inv,
               status: "PAID" as const,
-              midtransOrderId: response.data.data.midtransOrderId,
+              midtransOrderId: pakasirData.orderId,
             };
           }
           return inv;
         });
         setInvoices(updatedInvoices);
       } else {
-        alert(response.data.message || "Gagal memproses pembayaran");
+        setPaymentError(statusResponse.data.message || "Status pembayaran belum selesai");
       }
     } catch (err: any) {
       console.error(err);
-      alert(err.response?.data?.message || "Gagal memproses simulasi pembayaran");
+      setPaymentError(err.response?.data?.message || "Gagal memproses simulasi pembayaran");
     } finally {
       setProcessingPayment(false);
     }
@@ -438,25 +490,25 @@ export default function CekTagihanPage() {
 
       </div>
 
-      {/* Midtrans Snap Modal Overlay */}
+      {/* Pakasir Payment Modal Overlay */}
       {snapOpen && selectedInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
           {/* Snap Container */}
           <div className="w-full max-w-md bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col relative animate-scaleUp">
             
-            {/* Header: Midtrans Logo & Total */}
+            {/* Header: Pakasir Logo & Total */}
             <div className="bg-slate-50 px-6 py-5 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <span className="text-[9px] uppercase font-bold tracking-widest text-slate-400 block mb-0.5">
-                  SIMULASI SNAP GATEWAY
+                  SIMULASI PEMBAYARAN ONLINE
                 </span>
                 <h3 className="font-extrabold text-indigo-600 text-base flex items-center gap-1">
-                  midtrans <span className="text-slate-500 font-light text-[11px] border border-slate-300 px-1 py-0.2 rounded ml-1">Simulasi</span>
+                  pakasir <span className="text-slate-500 font-light text-[11px] border border-slate-355 px-1 py-0.2 rounded ml-1">Simulasi</span>
                 </h3>
               </div>
               <button
                 onClick={() => setSnapOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
                 disabled={processingPayment}
               >
                 <X className="w-5 h-5" />
@@ -466,7 +518,7 @@ export default function CekTagihanPage() {
             {paymentSuccess ? (
               /* Success screen */
               <div className="p-8 flex flex-col items-center justify-center text-center animate-fadeIn">
-                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 border-2 border-emerald-400 animate-pulse mb-6">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 border-2 border-emerald-400 mb-6">
                   <Check className="w-8 h-8 stroke-[3]" />
                 </div>
                 <h4 className="font-extrabold text-xl text-slate-900">Pembayaran Sukses!</h4>
@@ -477,8 +529,8 @@ export default function CekTagihanPage() {
                 <div className="w-full bg-slate-50 rounded-xl p-4 my-6 text-left border border-slate-100 space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Order ID</span>
-                    <span className="font-mono font-medium text-slate-700">
-                      {selectedInvoice.midtransOrderId || "MOCK-MIDTRANS"}
+                    <span className="font-mono font-medium text-slate-700 text-[10px] break-all select-all">
+                      {pakasirData?.orderId || "MOCK-PAKASIR"}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -487,11 +539,17 @@ export default function CekTagihanPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Metode</span>
-                    <span className="font-bold text-indigo-600 uppercase">{paymentMethod.replace("_", " ")}</span>
+                    <span className="font-bold text-indigo-650 uppercase">{paymentMethod.replace("_", " ")}</span>
                   </div>
+                  {pakasirData?.payment?.fee > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Biaya Layanan</span>
+                      <span className="font-medium text-slate-700">{formatRupiah(pakasirData.payment.fee)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between border-t border-slate-200/80 pt-2 font-bold text-slate-800 text-sm">
                     <span>Jumlah</span>
-                    <span>{formatRupiah(selectedInvoice.amount)}</span>
+                    <span>{formatRupiah(pakasirData?.payment?.total_payment || selectedInvoice.amount)}</span>
                   </div>
                 </div>
 
@@ -508,13 +566,13 @@ export default function CekTagihanPage() {
                 {/* Total Billing Info */}
                 <div className="bg-indigo-50/70 px-6 py-4 flex items-center justify-between border-b border-indigo-100">
                   <div className="text-xs">
-                    <span className="text-slate-500">Total Tagihan</span>
+                    <span className="text-slate-555">Total Tagihan</span>
                     <h5 className="font-extrabold text-slate-850 text-base mt-0.5">
                       {INDONESIAN_MONTHS[selectedInvoice.month]} {selectedInvoice.year}
                     </h5>
                   </div>
                   <span className="font-extrabold text-indigo-700 text-lg">
-                    {formatRupiah(selectedInvoice.amount)}
+                    {formatRupiah(pakasirData?.payment?.total_payment || selectedInvoice.amount)}
                   </span>
                 </div>
 
@@ -531,7 +589,7 @@ export default function CekTagihanPage() {
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "qris"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
-                          : "border-slate-100 hover:border-slate-300 text-slate-650 bg-slate-50/30"
+                          : "border-slate-100 hover:border-slate-300 text-slate-655 bg-slate-50/30"
                       }`}
                     >
                       <QrCode className="w-5 h-5" />
@@ -544,7 +602,7 @@ export default function CekTagihanPage() {
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "va_mandiri"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
-                          : "border-slate-100 hover:border-slate-300 text-slate-650 bg-slate-50/30"
+                          : "border-slate-100 hover:border-slate-350 bg-slate-50/30"
                       }`}
                     >
                       <Building2 className="w-5 h-5" />
@@ -557,7 +615,7 @@ export default function CekTagihanPage() {
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "va_bca"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
-                          : "border-slate-100 hover:border-slate-300 text-slate-650 bg-slate-50/30"
+                          : "border-slate-100 hover:border-slate-300 text-slate-655 bg-slate-50/30"
                       }`}
                     >
                       <Building2 className="w-5 h-5" />
@@ -579,28 +637,47 @@ export default function CekTagihanPage() {
                   </div>
 
                   {/* Payment Details Container */}
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
-                    {paymentMethod === "qris" ? (
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3 min-h-[100px] flex flex-col justify-center">
+                    {loadingPaymentCode ? (
+                      <div className="flex flex-col items-center justify-center py-4">
+                        <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                        <span className="text-xs text-slate-500 mt-2">Mendapatkan kode pembayaran...</span>
+                      </div>
+                    ) : paymentError ? (
+                      <div className="bg-red-50 text-red-650 p-3 rounded-lg text-xs font-semibold text-center">
+                        {paymentError}
+                      </div>
+                    ) : paymentMethod === "qris" ? (
                       <div className="flex flex-col items-center text-center space-y-2 py-2">
                         <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
-                          <QrCode className="w-32 h-32 text-slate-800" />
+                          {vaNumber ? (
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(vaNumber)}`}
+                              alt="QRIS QR Code"
+                              className="w-32 h-32 mx-auto"
+                            />
+                          ) : (
+                            <QrCode className="w-32 h-32 text-slate-800" />
+                          )}
                         </div>
                         <p className="text-[10px] text-slate-500">
                           Pindai kode QR di atas menggunakan aplikasi e-wallet pilihan Anda.
                         </p>
                       </div>
                     ) : paymentMethod === "va_mandiri" || paymentMethod === "va_bca" ? (
-                      <div className="space-y-2.5 text-xs text-slate-700">
+                      <div className="space-y-2.5 text-xs text-slate-750">
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
                           Detail Transfer Bank
                         </span>
                         <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200">
                           <span className="font-mono font-bold text-slate-800 text-sm tracking-wide">
-                            {vaNumber}
+                            {vaNumber || "Memuat..."}
                           </span>
                           <button
+                            type="button"
                             onClick={() => copyToClipboard(vaNumber)}
                             className="text-indigo-600 hover:text-indigo-800 p-1 flex items-center gap-0.5 cursor-pointer"
+                            disabled={!vaNumber}
                           >
                             {copied ? (
                               <Check className="w-3.5 h-3.5" />
@@ -617,7 +694,7 @@ export default function CekTagihanPage() {
                         </p>
                       </div>
                     ) : (
-                      <div className="text-xs text-slate-700 py-2 space-y-1">
+                      <div className="text-xs text-slate-755 py-2 space-y-1">
                         <p className="font-semibold text-slate-800">GoPay Instant Checkout</p>
                         <p className="text-[10px] text-slate-500">
                           Klik tombol bayar di bawah untuk membuka aplikasi GoPay di ponsel Anda secara otomatis.
@@ -631,12 +708,12 @@ export default function CekTagihanPage() {
                 <div className="px-6 py-5 bg-slate-50 border-t border-slate-100">
                   <button
                     onClick={handleSimulatePayment}
-                    disabled={processingPayment}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm py-3.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                    disabled={processingPayment || loadingPaymentCode || !!paymentError}
+                    className="w-full bg-indigo-600 hover:bg-indigo-755 text-white font-extrabold text-sm py-3.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                   >
                     {processingPayment ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
                         <span>Memproses Pembayaran...</span>
                       </>
                     ) : (
