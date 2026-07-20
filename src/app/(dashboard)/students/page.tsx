@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { api } from "@/lib/api";
+import * as XLSX from "xlsx";
 import {
   Plus,
   Edit2,
@@ -69,6 +70,8 @@ export default function StudentsPage() {
     failedCount: number;
     errors: string[];
   } | null>(null);
+  const [parsedRowsForImport, setParsedRowsForImport] = useState<any[] | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState("");
 
   // Form Fields
   const [formNis, setFormNis] = useState("");
@@ -244,49 +247,216 @@ export default function StudentsPage() {
     }
   };
 
-  // Parsing CSV manually
+  // Helper to parse CSV text into objects dynamically detecting delimiters and header row
+  const parseCsvText = (text: string) => {
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+    if (lines.length < 2) {
+      throw new Error("CSV minimal harus memiliki baris header dan satu baris data");
+    }
+
+    // Detect header row index (bypass title rows)
+    let headerRowIndex = 0;
+    for (let r = 0; r < Math.min(lines.length, 10); r++) {
+      const rowText = lines[r].toLowerCase();
+      if (rowText.includes("nama") || rowText.includes("nis") || rowText.includes("siswa") || rowText.includes("hp") || rowText.includes("telp")) {
+        headerRowIndex = r;
+        break;
+      }
+    }
+
+    // Detect delimiter
+    const firstLine = lines[headerRowIndex];
+    let delimiter = ",";
+    if (firstLine.includes("\t")) {
+      delimiter = "\t";
+    } else if (firstLine.includes(";")) {
+      delimiter = ";";
+    }
+
+    // Helper to parse CSV line respecting quotes
+    const parseLine = (line: string, delim: string) => {
+      const result: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === delim && !inQuotes) {
+          result.push(current.trim().replace(/^["']|["']$/g, ""));
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim().replace(/^["']|["']$/g, ""));
+      return result;
+    };
+
+    const headers = parseLine(lines[headerRowIndex], delimiter).map(h => h.toLowerCase().trim());
+    const parsedRows: any[] = [];
+    for (let i = headerRowIndex + 1; i < lines.length; i++) {
+      const columns = parseLine(lines[i], delimiter);
+      const rowData: any = {};
+      headers.forEach((header, index) => {
+        if (header) {
+          rowData[header] = columns[index] || "";
+        }
+      });
+      parsedRows.push(rowData);
+    }
+    return parsedRows;
+  };
+
+  // Mapping Excel or CSV keys to backend schema expectations
+  const mapExcelToImportRows = (rows: any[]) => {
+    return rows
+      .map((row: any, index: number) => {
+        const findVal = (prefixes: string[]) => {
+          for (const p of prefixes) {
+            const cleanP = p.toLowerCase().replace(/\s+/g, "");
+            const key = Object.keys(row).find(k => {
+              const cleanK = k.toLowerCase().replace(/\s+/g, "");
+              return cleanK === cleanP || cleanK.includes(cleanP);
+            });
+            if (key && row[key] !== undefined && row[key] !== null && row[key].toString().trim() !== "") {
+              return row[key];
+            }
+          }
+          return "";
+        };
+
+        const rawNis = findVal(["nisn", "nis", "nomorinduk", "noinduk", "id"]);
+        const name = findVal(["namasiswa", "namalengkap", "nama", "studentname", "siswa"]);
+
+        // Skip completely empty rows (where name is empty)
+        if (!name || name.toString().trim() === "") {
+          return null;
+        }
+
+        const className = findVal(["kelas", "classname", "class", "rombel", "rombongan"]);
+        const tempatLahir = findVal(["tempatlahir", "tempattanggallahir"]);
+        const tanggalLahir = findVal(["tanggallahir", "birthdate"]);
+        const parentName = findVal(["namaorangtua", "namaortu", "parentname", "wali", "orangtua", "ibu", "ayah", "namawali"]);
+        const rawPhone = findVal(["hportu", "parentphone", "nohp", "notelp", "nowa", "whatsapp", "wa", "telp", "phone", "hp", "kontak", "telepon", "handphone"]);
+        const rawSpp = findVal(["besaranspp", "sppamount", "spp"]);
+        const rawDiscount = findVal(["diskonspp", "diskon", "discount"]);
+
+        // Automatic NIS if empty
+        let nis = rawNis ? rawNis.toString().trim() : "";
+        if (!nis) {
+          const cleanClass = className ? className.toString().trim().toUpperCase() : "KB";
+          const currentYear = new Date().getFullYear();
+          const indexStr = String(index + 1).padStart(3, "0");
+          nis = `${cleanClass}-${currentYear}-${indexStr}`;
+        }
+
+        // Clean Phone Number
+        let parentPhoneNumber = "";
+        if (rawPhone) {
+          const clean = rawPhone.toString().trim().replace(/[^0-9]/g, "");
+          if (clean) {
+            parentPhoneNumber = clean.startsWith("8") ? "0" + clean : clean;
+          }
+        }
+        if (!parentPhoneNumber) {
+          parentPhoneNumber = `089999999${String(index + 1).padStart(3, "0")}`;
+        }
+
+        // Clean birth date
+        let birthDateStr = "";
+        if (tanggalLahir) {
+          birthDateStr = tanggalLahir.toString().trim();
+        }
+
+        // Parse discount percentage
+        let discountPercentage = 0;
+        if (rawDiscount) {
+          const valStr = rawDiscount.toString().trim().toLowerCase();
+          const sppAmount = Number(rawSpp) || 185000;
+          if (valStr.includes("beradik") || valStr.includes("kakak")) {
+            discountPercentage = 10;
+          } else {
+            const numVal = parseFloat(valStr);
+            if (!isNaN(numVal)) {
+              if (numVal <= 100) {
+                discountPercentage = Math.round(numVal);
+              } else if (sppAmount > 0) {
+                discountPercentage = Math.round((numVal / sppAmount) * 100);
+              }
+            }
+          }
+        }
+
+        // Map class to unit
+        let unitName = "SD";
+        const cleanClassUpper = className ? className.toString().toUpperCase() : "";
+        if (cleanClassUpper.includes("KB")) unitName = "KB";
+        else if (cleanClassUpper.includes("RA")) unitName = "RA";
+        else if (cleanClassUpper.includes("TPA")) unitName = "TPA";
+
+        return {
+          nis,
+          nama: name.toString().trim(),
+          kelas: className || "KB",
+          unit: unitName,
+          angkatan: new Date().getFullYear(),
+          diskon: discountPercentage,
+          tanggal_lahir: birthDateStr,
+          nama_ortu: parentName || `Orang Tua ${name}`,
+          hp_ortu: parentPhoneNumber,
+          email_ortu: `${parentPhoneNumber}@spp-parent.com`
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+  };
+
+  // Parsing CSV / Excel
   const handleCsvImport = async (e: React.FormEvent) => {
     e.preventDefault();
     setImportResult(null);
     setError(null);
 
-    if (!csvText.trim()) {
-      setError("Silakan tempel teks CSV terlebih dahulu");
+    let rowsToImport: any[] = [];
+
+    if (parsedRowsForImport && parsedRowsForImport.length > 0) {
+      rowsToImport = parsedRowsForImport;
+    } else {
+      if (!csvText.trim()) {
+        setError("Silakan pilih file atau tempel teks CSV terlebih dahulu");
+        return;
+      }
+
+      try {
+        const parsedCsvRows = parseCsvText(csvText);
+        // Apply our Excel mapper cleanups to raw CSV inputs too
+        rowsToImport = mapExcelToImportRows(parsedCsvRows);
+      } catch (err: any) {
+        setError(err.message || "Gagal mengurai data CSV");
+        return;
+      }
+    }
+
+    if (rowsToImport.length === 0) {
+      setError("Tidak ada data valid yang siap diimport. Pastikan kolom Nama Siswa terisi.");
       return;
     }
 
     setImportLoading(true);
     try {
-      // Split lines
-      const lines = csvText.split("\n").map(line => line.trim()).filter(line => line.length > 0);
-      if (lines.length < 2) {
-        throw new Error("CSV minimal harus memiliki baris header dan satu baris data");
-      }
-
-      // Read header
-      const headers = lines[0].toLowerCase().split(",").map(h => h.trim());
-      
-      const parsedRows: any[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const columns = lines[i].split(",").map(c => c.trim().replace(/^["']|["']$/g, ""));
-        const rowData: any = {};
-        headers.forEach((header, index) => {
-          rowData[header] = columns[index] || "";
-        });
-        parsedRows.push(rowData);
-      }
-
-      const response = await api.post("/students/import", { rows: parsedRows });
+      const response = await api.post("/students/import", { rows: rowsToImport });
       
       if (response.data.success) {
         setImportResult(response.data.data);
         setSuccessMsg(response.data.message);
         setCsvText("");
+        setParsedRowsForImport(null);
+        setUploadedFileName("");
         fetchStudents();
         fetchUniqueClasses();
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message || "Gagal melakukan import data CSV");
+      setError(err.response?.data?.message || err.message || "Gagal melakukan import data siswa");
     } finally {
       setImportLoading(false);
     }
@@ -296,13 +466,72 @@ export default function StudentsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploadedFileName(file.name);
+    setError(null);
+    setImportResult(null);
+
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      setCsvText(text);
-    };
-    reader.readAsText(file);
+
+    // If it's a CSV file, read it as text and parse it robustly
+    if (file.name.endsWith(".csv")) {
+      reader.onload = (event) => {
+        try {
+          const text = event.target?.result as string;
+          const parsedCsvRows = parseCsvText(text);
+          const mapped = mapExcelToImportRows(parsedCsvRows);
+          setParsedRowsForImport(mapped);
+        } catch (err: any) {
+          setError("Gagal membaca file CSV: " + err.message);
+          setParsedRowsForImport(null);
+          setUploadedFileName("");
+        }
+      };
+      reader.readAsText(file, "UTF-8");
+    } else {
+      // Excel files (.xlsx, .xls)
+      reader.onload = (event) => {
+        try {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array" });
+          
+          // Get the first worksheet
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          // Detect header row dynamically to skip title rows
+          const rawMatrix = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+          let headerRowIndex = 0;
+          for (let r = 0; r < Math.min(rawMatrix.length, 10); r++) {
+            const rowCells = (rawMatrix[r] || []).map(cell => (cell || "").toString().toLowerCase());
+            const matchCount = rowCells.filter(cell => 
+              cell.includes("nama") || cell.includes("nis") || cell.includes("siswa") || cell.includes("kelas") || cell.includes("hp") || cell.includes("telp") || cell.includes("wali") || cell.includes("ortu")
+            ).length;
+
+            if (matchCount >= 2) {
+              headerRowIndex = r;
+              break;
+            }
+          }
+
+          const rows = XLSX.utils.sheet_to_json(worksheet, { range: headerRowIndex });
+          
+          if (rows.length === 0) {
+            throw new Error("File kosong atau tidak dapat diurai");
+          }
+
+          // Perform mapping to backend fields
+          const mapped = mapExcelToImportRows(rows);
+          setParsedRowsForImport(mapped);
+        } catch (err: any) {
+          setError("Gagal membaca file Excel: " + err.message);
+          setParsedRowsForImport(null);
+          setUploadedFileName("");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
   };
+
 
   // Client-side CSV export
   const handleExportCsv = () => {
@@ -571,48 +800,103 @@ export default function StudentsPage() {
 
             <h2 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
               <Upload className="w-4 h-4 text-indigo-400" />
-              Import Data Siswa via CSV
+              Import Data Siswa via CSV / Excel
             </h2>
 
             <div className="bg-slate-950/80 border border-slate-850 p-4 rounded-xl mb-4 space-y-2">
               <p className="font-semibold text-slate-300 flex items-center gap-1.5">
-                <Info className="w-4 h-4 text-indigo-400" /> Format Kolom CSV (Pemisah Koma):
-              </p>
-              <p className="font-mono bg-slate-900 p-2 rounded text-[11px] text-indigo-300 select-all overflow-x-auto whitespace-nowrap">
-                nis,nama,kelas,unit,angkatan,diskon,tanggal_lahir,nama_ortu,hp_ortu,email_ortu
+                <Info className="w-4 h-4 text-indigo-400" /> Panduan Import File:
               </p>
               <ul className="list-disc pl-5 space-y-1 text-slate-400 text-[11px]">
-                <li><b>nis</b>: Nomor Induk Siswa (Unik - Kunci Sinkronisasi Tahunan).</li>
-                <li><b>unit</b>: Diisi "KB", "RA", "SD", atau "TPA" (case-insensitive).</li>
-                <li><b>tanggal_lahir</b>: Digunakan sebagai password default wali murid (format: <b>DD-MM-YYYY</b>). Contoh: `10-05-2015` -&gt; password: `10052015`.</li>
-                <li><b>hp_ortu</b>: Nomor handphone wali murid sebagai ID Login akun (Unik).</li>
+                <li>Dukungan file: <b>Excel (.xlsx, .xls)</b> atau <b>CSV (.csv)</b>.</li>
+                <li>Kolom yang dibaca: <b>Nama Siswa</b>, <b>Kelas</b>, <b>Nama Orang Tua</b>, <b>Telp</b>, <b>Besaran spp</b>, <b>Diskon spp</b>, dan <b>NISN/NIS</b> (opsional).</li>
+                <li>Jika <b>NISN/NIS</b> kosong, NIS akan otomatis digenerate (contoh: `KB-2026-001`).</li>
+                <li>Jika <b>No. Telp Wali</b> kosong, nomor dummy unik akan otomatis dibuatkan.</li>
+                <li>Diskon SPP berupa teks seperti <i>"kakak beradik"</i> akan otomatis divalidasi ke 10%, sedangkan nominal (seperti 85.000) akan dikonversi ke persentase secara otomatis.</li>
               </ul>
             </div>
 
             <form onSubmit={handleCsvImport} className="space-y-4">
               <div className="flex flex-col sm:flex-row gap-4 items-center">
                 <label className="w-full sm:w-auto px-4 py-2 border border-slate-800 hover:border-slate-700 bg-slate-950 text-slate-300 rounded-lg text-center font-semibold transition-all cursor-pointer inline-flex items-center justify-center gap-2">
-                  <Upload className="w-3.5 h-3.5" /> Pilih File CSV
+                  <Upload className="w-3.5 h-3.5" /> Pilih File CSV / Excel
                   <input
                     type="file"
-                    accept=".csv"
+                    accept=".csv,.xlsx,.xls"
                     onChange={handleFileUpload}
                     className="hidden"
                   />
                 </label>
-                <span className="text-[10px] text-slate-500">Atau langsung tempel data CSV Anda di bawah ini.</span>
+                {uploadedFileName && (
+                  <span className="text-[11px] text-emerald-400 font-semibold truncate max-w-xs">
+                    {uploadedFileName}
+                  </span>
+                )}
+                <span className="text-[10px] text-slate-500">Atau tempel data CSV manual di bawah ini.</span>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="font-semibold text-slate-300">Teks CSV Data Siswa</label>
-                <textarea
-                  rows={8}
-                  placeholder="nis,nama,kelas,unit,angkatan,diskon,tanggal_lahir,nama_ortu,hp_ortu,email_ortu&#10;SD-2026-999,Ananda Pradana,6A,SD,2024,0,12-10-2014,Agus Pradana,089999999999,agus@test.com"
-                  value={csvText}
-                  onChange={(e) => setCsvText(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-white p-3 rounded-lg font-mono placeholder:text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
-                />
-              </div>
+              {!parsedRowsForImport && (
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-slate-300">Teks CSV Data Siswa</label>
+                  <textarea
+                    rows={6}
+                    placeholder="nis,nama,kelas,unit,angkatan,diskon,tanggal_lahir,nama_ortu,hp_ortu,email_ortu&#10;SD-2026-999,Ananda Pradana,6A,SD,2024,0,12-10-2014,Agus Pradana,089999999999,agus@test.com"
+                    value={csvText}
+                    onChange={(e) => setCsvText(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 text-white p-3 rounded-lg font-mono placeholder:text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+              )}
+
+              {parsedRowsForImport && parsedRowsForImport.length > 0 && (
+                <div className="bg-slate-950 border border-indigo-500/20 p-4 rounded-xl space-y-2">
+                  <p className="font-bold text-white flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    Preview Data ({parsedRowsForImport.length} baris siap diimport):
+                  </p>
+                  <div className="text-[10px] text-slate-400 max-h-48 overflow-y-auto border border-slate-900 rounded p-2.5 bg-slate-950/40">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-slate-500">
+                          <th className="pb-1 font-semibold">Nama Siswa</th>
+                          <th className="pb-1 font-semibold">NIS</th>
+                          <th className="pb-1 font-semibold">Kelas</th>
+                          <th className="pb-1 font-semibold">Nama Wali</th>
+                          <th className="pb-1 font-semibold">No HP</th>
+                          <th className="pb-1 font-semibold">Diskon</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parsedRowsForImport.slice(0, 5).map((row, i) => (
+                          <tr key={i} className="border-b border-slate-900/50">
+                            <td className="py-1 max-w-[120px] truncate text-slate-200">{row.nama}</td>
+                            <td className="py-1 font-mono text-indigo-300">{row.nis}</td>
+                            <td className="py-1">{row.kelas}</td>
+                            <td className="py-1 max-w-[100px] truncate text-slate-300">{row.nama_ortu}</td>
+                            <td className="py-1 font-mono">{row.hp_ortu}</td>
+                            <td className="py-1 text-amber-400 font-bold">{row.diskon}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {parsedRowsForImport.length > 5 && (
+                      <p className="text-[9px] text-slate-500 italic mt-2 text-center">
+                        ... dan {parsedRowsForImport.length - 5} data lainnya.
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setParsedRowsForImport(null);
+                      setUploadedFileName("");
+                    }}
+                    className="text-[10px] text-red-400 hover:text-red-300 underline font-medium cursor-pointer"
+                  >
+                    Hapus file / reset data
+                  </button>
+                </div>
+              )}
 
               {importResult && (
                 <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-2">
@@ -634,7 +918,11 @@ export default function StudentsPage() {
               <div className="flex gap-3 justify-end pt-4 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsImportModalOpen(false)}
+                  onClick={() => {
+                    setIsImportModalOpen(false);
+                    setParsedRowsForImport(null);
+                    setUploadedFileName("");
+                  }}
                   className="px-4 py-2 border border-slate-800 hover:border-slate-700 text-slate-350 rounded-lg font-semibold transition-colors cursor-pointer"
                   disabled={importLoading}
                 >
