@@ -20,12 +20,17 @@ import {
 interface ClassRecap {
   className: string;
   schoolUnitId: number;
-  schoolUnitName: string;
+  schoolUnitName?: string;
+  schoolUnit?: string;
   totalStudents: number;
   unpaidStudentsCount: number;
   totalUnpaidMonths: number;
-  totalUnpaidAmount: number;
+  totalUnpaidAmount?: number;
+  totalUnpaidNominal?: number;
 }
+
+const getRecapNominal = (c: ClassRecap) => Number(c.totalUnpaidAmount ?? c.totalUnpaidNominal ?? 0);
+const getRecapUnitName = (c: ClassRecap) => c.schoolUnitName || c.schoolUnit || "-";
 
 const MONTHS = [
   { value: 1, name: "Januari" },
@@ -97,19 +102,19 @@ export default function ClassRecapPage() {
       style: "currency",
       currency: "IDR",
       minimumFractionDigits: 0,
-    }).format(value);
+    }).format(value || 0);
   };
 
   // Client-side CSV export of class recap
   const handleExportCsv = () => {
     const headers = ["Unit Sekolah", "Kelas", "Total Siswa", "Siswa Menunggak", "Total Bulan Tunggakan", "Total Nominal Tunggakan"];
     const rows = recapData.map(c => [
-      c.schoolUnitName,
+      getRecapUnitName(c),
       c.className,
       c.totalStudents,
       c.unpaidStudentsCount,
       c.totalUnpaidMonths,
-      c.totalUnpaidAmount
+      getRecapNominal(c)
     ]);
 
     const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(","))].join("\n");
@@ -128,7 +133,7 @@ export default function ClassRecapPage() {
   const totalClasses = recapData.length;
   const classesWithUnpaid = recapData.filter(c => c.unpaidStudentsCount > 0).length;
   const totalUnpaidMonths = recapData.reduce((sum, c) => sum + c.totalUnpaidMonths, 0);
-  const totalUnpaidAmount = recapData.reduce((sum, c) => sum + c.totalUnpaidAmount, 0);
+  const totalUnpaidAmount = recapData.reduce((sum, c) => sum + getRecapNominal(c), 0);
 
   // Navigate to detailed unpaid list prefilled for that class
   const handleViewClassDetail = (className: string, schoolUnitId: number) => {
@@ -300,7 +305,7 @@ export default function ClassRecapPage() {
                     >
                       <td className="px-6 py-4">
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                          {row.schoolUnitName}
+                          Unit {getRecapUnitName(row)}
                         </span>
                       </td>
                       <td className="px-6 py-4 font-bold text-white">
@@ -328,7 +333,7 @@ export default function ClassRecapPage() {
                         {row.totalUnpaidMonths} bulan
                       </td>
                       <td className="px-6 py-4 font-mono font-extrabold text-rose-400">
-                        {formatRupiah(row.totalUnpaidAmount)}
+                        {formatRupiah(getRecapNominal(row))}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button
