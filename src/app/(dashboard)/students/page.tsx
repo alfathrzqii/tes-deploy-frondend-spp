@@ -249,7 +249,8 @@ export default function StudentsPage() {
 
   // Helper to parse CSV text into objects dynamically detecting delimiters and header row
   const parseCsvText = (text: string) => {
-    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+    const cleanText = text.replace(/[\uFEFF\u00A0]/g, "").trim();
+    const lines = cleanText.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
     if (lines.length < 2) {
       throw new Error("CSV minimal harus memiliki baris header dan satu baris data");
     }
@@ -258,7 +259,7 @@ export default function StudentsPage() {
     let headerRowIndex = 0;
     for (let r = 0; r < Math.min(lines.length, 10); r++) {
       const rowText = lines[r].toLowerCase();
-      if (rowText.includes("nama") || rowText.includes("nis") || rowText.includes("siswa") || rowText.includes("hp") || rowText.includes("telp")) {
+      if (rowText.includes("nama") || rowText.includes("nis") || rowText.includes("siswa") || rowText.includes("hp") || rowText.includes("telp") || rowText.includes("wali")) {
         headerRowIndex = r;
         break;
       }
@@ -312,27 +313,40 @@ export default function StudentsPage() {
   const mapExcelToImportRows = (rows: any[]) => {
     return rows
       .map((row: any, index: number) => {
-        const findVal = (prefixes: string[]) => {
+        const findVal = (prefixes: string[], excludeWords: string[] = []) => {
+          const keys = Object.keys(row);
+
+          // 1. Try exact match first
           for (const p of prefixes) {
             const cleanP = p.toLowerCase().replace(/\s+/g, "");
-            const key = Object.keys(row).find(k => {
-              const cleanK = k.toLowerCase().replace(/\s+/g, "");
-              return cleanK === cleanP || cleanK.includes(cleanP);
+            const exactKey = keys.find(k => {
+              const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+              if (excludeWords.some(ex => cleanK.includes(ex))) return false;
+              return cleanK === cleanP;
             });
-            if (key && row[key] !== undefined && row[key] !== null && row[key].toString().trim() !== "") {
-              return row[key];
+            if (exactKey && row[exactKey] !== undefined && row[exactKey] !== null && row[exactKey].toString().trim() !== "") {
+              return row[exactKey].toString().trim();
             }
           }
+
+          // 2. Try includes match next
+          for (const p of prefixes) {
+            const cleanP = p.toLowerCase().replace(/\s+/g, "");
+            const includesKey = keys.find(k => {
+              const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+              if (excludeWords.some(ex => cleanK.includes(ex))) return false;
+              return cleanK.includes(cleanP);
+            });
+            if (includesKey && row[includesKey] !== undefined && row[includesKey] !== null && row[includesKey].toString().trim() !== "") {
+              return row[includesKey].toString().trim();
+            }
+          }
+
           return "";
         };
 
         const rawNis = findVal(["nisn", "nis", "nomorinduk", "noinduk", "id"]);
-        const name = findVal(["namasiswa", "namalengkap", "nama", "studentname", "siswa"]);
-
-        // Skip completely empty rows (where name is empty)
-        if (!name || name.toString().trim() === "") {
-          return null;
-        }
+        let name = findVal(["namasiswa", "namalengkap", "nama", "studentname", "siswa"], ["ortu", "wali", "parent", "ibu", "ayah"]);
 
         const className = findVal(["kelas", "classname", "class", "rombel", "rombongan"]);
         const tempatLahir = findVal(["tempatlahir", "tempattanggallahir"]);
@@ -341,6 +355,16 @@ export default function StudentsPage() {
         const rawPhone = findVal(["hportu", "parentphone", "nohp", "notelp", "nowa", "whatsapp", "wa", "telp", "phone", "hp", "kontak", "telepon", "handphone"]);
         const rawSpp = findVal(["besaranspp", "sppamount", "spp"]);
         const rawDiscount = findVal(["diskonspp", "diskon", "discount"]);
+
+        // If Student Name column is missing, fallback to Parent/Guardian Name
+        if (!name) {
+          name = parentName || (row.nama ? row.nama.toString() : "");
+        }
+
+        // Skip completely empty rows (where both student name and parent name are missing)
+        if (!name || name.toString().trim() === "") {
+          return null;
+        }
 
         // Automatic NIS if empty
         let nis = rawNis ? rawNis.toString().trim() : "";
