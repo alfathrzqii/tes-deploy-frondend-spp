@@ -196,13 +196,14 @@ export default function PaymentsPage() {
       };
 
       const response = await api.post("/invoices/pay-offline", payload);
-      const invData = response.data.data?.invoice || response.data.data || {
-        id: Date.now(),
-        invoiceType,
-        month: selectedMonth,
-        year: selectedYear,
-        amount: Number(paymentAmount),
-        status: "PAID",
+      const rawData = response.data.data?.invoice || response.data.data || {};
+      const invData = {
+        id: rawData.id || rawData.invoiceId || rawData.transactionId || Date.now(),
+        invoiceType: rawData.invoiceType || invoiceType,
+        month: rawData.month || selectedMonth,
+        year: rawData.year || selectedYear,
+        amount: rawData.amount || rawData.amountPaid || Number(paymentAmount),
+        status: rawData.status || "PAID",
       };
       setSuccessMsg(response.data.message || "Pembayaran tunai berhasil diproses");
       setReceiptData(invData);
@@ -619,7 +620,7 @@ export default function PaymentsPage() {
               <div className="space-y-3 text-[11px] text-slate-400">
                 <div className="flex justify-between">
                   <span className="text-slate-500">No. Invoice ID</span>
-                  <span className="font-mono font-bold text-white">#INV-{receiptData.id}</span>
+                  <span className="font-mono font-bold text-white">#INV-{receiptData.id || receiptData.invoiceId || "-"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Nama Siswa</span>
@@ -754,7 +755,7 @@ export default function PaymentsPage() {
                     {receiptData.status === "PAID" ? "LUNAS / SAH" : "TERBAYAR SEBAGIAN"}
                   </span>
                   <p className="text-[10px] font-mono text-slate-400 mt-1">
-                    #INV-{receiptData.id}
+                    #INV-{receiptData.id || receiptData.invoiceId || "-"}
                   </p>
                 </div>
               </div>
