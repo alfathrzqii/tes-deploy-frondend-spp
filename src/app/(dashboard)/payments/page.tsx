@@ -196,8 +196,16 @@ export default function PaymentsPage() {
       };
 
       const response = await api.post("/invoices/pay-offline", payload);
+      const invData = response.data.data?.invoice || response.data.data || {
+        id: Date.now(),
+        invoiceType,
+        month: selectedMonth,
+        year: selectedYear,
+        amount: Number(paymentAmount),
+        status: "PAID",
+      };
       setSuccessMsg(response.data.message || "Pembayaran tunai berhasil diproses");
-      setReceiptData(response.data.data.invoice);
+      setReceiptData(invData);
       setShowReceiptModal(true);
       
       // Refresh invoices
