@@ -247,15 +247,26 @@ export default function StudentsPage() {
     }
   };
 
-  // Helper to parse CSV text into objects dynamically detecting delimiters
+  // Helper to parse CSV text into objects dynamically detecting delimiters and header row
   const parseCsvText = (text: string) => {
-    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+    const cleanText = text.replace(/[\uFEFF\u00A0]/g, "").trim();
+    const lines = cleanText.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
     if (lines.length < 2) {
       throw new Error("CSV minimal harus memiliki baris header dan satu baris data");
     }
 
+    // Detect header row index (bypass title rows)
+    let headerRowIndex = 0;
+    for (let r = 0; r < Math.min(lines.length, 10); r++) {
+      const rowText = lines[r].toLowerCase();
+      if (rowText.includes("nama") || rowText.includes("nis") || rowText.includes("siswa") || rowText.includes("hp") || rowText.includes("telp") || rowText.includes("wali")) {
+        headerRowIndex = r;
+        break;
+      }
+    }
+
     // Detect delimiter
-    const firstLine = lines[0];
+    const firstLine = lines[headerRowIndex];
     let delimiter = ",";
     if (firstLine.includes("\t")) {
       delimiter = "\t";
@@ -283,9 +294,9 @@ export default function StudentsPage() {
       return result;
     };
 
-    const headers = parseLine(lines[0], delimiter).map(h => h.toLowerCase().trim());
+    const headers = parseLine(lines[headerRowIndex], delimiter).map(h => h.toLowerCase().trim());
     const parsedRows: any[] = [];
-    for (let i = 1; i < lines.length; i++) {
+    for (let i = headerRowIndex + 1; i < lines.length; i++) {
       const columns = parseLine(lines[i], delimiter);
       const rowData: any = {};
       headers.forEach((header, index) => {
@@ -302,28 +313,58 @@ export default function StudentsPage() {
   const mapExcelToImportRows = (rows: any[]) => {
     return rows
       .map((row: any, index: number) => {
-        const findVal = (prefixes: string[]) => {
-          const key = Object.keys(row).find(k => 
-            prefixes.some(p => k.toLowerCase().replace(/\s+/g, "").includes(p.toLowerCase().replace(/\s+/g, "")))
-          );
-          return key ? row[key] : "";
+        const findVal = (prefixes: string[], excludeWords: string[] = []) => {
+          const keys = Object.keys(row);
+
+          // 1. Try exact match first
+          for (const p of prefixes) {
+            const cleanP = p.toLowerCase().replace(/\s+/g, "");
+            const exactKey = keys.find(k => {
+              const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+              if (excludeWords.some(ex => cleanK.includes(ex))) return false;
+              return cleanK === cleanP;
+            });
+            if (exactKey && row[exactKey] !== undefined && row[exactKey] !== null && row[exactKey].toString().trim() !== "") {
+              return row[exactKey].toString().trim();
+            }
+          }
+
+          // 2. Try includes match next
+          for (const p of prefixes) {
+            const cleanP = p.toLowerCase().replace(/\s+/g, "");
+            const includesKey = keys.find(k => {
+              const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+              if (excludeWords.some(ex => cleanK.includes(ex))) return false;
+              return cleanK.includes(cleanP);
+            });
+            if (includesKey && row[includesKey] !== undefined && row[includesKey] !== null && row[includesKey].toString().trim() !== "") {
+              return row[includesKey].toString().trim();
+            }
+          }
+
+          return "";
         };
 
-        const rawNis = findVal(["nisn", "nis", "nomorinduk"]);
-        const name = findVal(["namasiswa", "nama", "studentname"]);
+        const rawNis = findVal(["nisn", "nis", "nomorinduk", "noinduk", "id"]);
+        let name = findVal(["namasiswa", "namalengkap", "nama", "studentname", "siswa"], ["ortu", "wali", "parent", "ibu", "ayah"]);
 
-        // Skip completely empty rows (where name is empty)
+        const className = findVal(["kelas", "classname", "class", "rombel", "rombongan"]);
+        const tempatLahir = findVal(["tempatlahir", "tempattanggallahir"]);
+        const tanggalLahir = findVal(["tanggallahir", "birthdate"]);
+        const parentName = findVal(["namaorangtua", "namaortu", "parentname", "wali", "orangtua", "ibu", "ayah", "namawali"]);
+        const rawPhone = findVal(["hportu", "parentphone", "nohp", "notelp", "nowa", "whatsapp", "wa", "telp", "phone", "hp", "kontak", "telepon", "handphone"]);
+        const rawSpp = findVal(["besaranspp", "sppamount", "spp"]);
+        const rawDiscount = findVal(["diskonspp", "diskon", "discount"]);
+
+        // If Student Name column is missing, fallback to Parent/Guardian Name
+        if (!name) {
+          name = parentName || (row.nama ? row.nama.toString() : "");
+        }
+
+        // Skip completely empty rows (where both student name and parent name are missing)
         if (!name || name.toString().trim() === "") {
           return null;
         }
-
-        const className = findVal(["kelas", "classname", "class"]);
-        const tempatLahir = findVal(["tempatlahir", "tempattanggallahir"]);
-        const tanggalLahir = findVal(["tanggallahir", "birthdate"]);
-        const parentName = findVal(["namaorangtua", "namaortu", "parentname", "wali"]);
-        const rawPhone = findVal(["telp", "phone", "hportu", "parentphone", "hp"]);
-        const rawSpp = findVal(["besaranspp", "sppamount", "spp"]);
-        const rawDiscount = findVal(["diskonspp", "diskon", "discount"]);
 
         // Automatic NIS if empty
         let nis = rawNis ? rawNis.toString().trim() : "";
@@ -357,7 +398,7 @@ export default function StudentsPage() {
         if (rawDiscount) {
           const valStr = rawDiscount.toString().trim().toLowerCase();
           const sppAmount = Number(rawSpp) || 185000;
-          if (valStr === "kakak beradik") {
+          if (valStr.includes("beradik") || valStr.includes("kakak")) {
             discountPercentage = 10;
           } else {
             const numVal = parseFloat(valStr);
@@ -481,8 +522,22 @@ export default function StudentsPage() {
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
           
-          // Convert to JSON
-          const rows = XLSX.utils.sheet_to_json(worksheet);
+          // Detect header row dynamically to skip title rows
+          const rawMatrix = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+          let headerRowIndex = 0;
+          for (let r = 0; r < Math.min(rawMatrix.length, 10); r++) {
+            const rowCells = (rawMatrix[r] || []).map(cell => (cell || "").toString().toLowerCase());
+            const matchCount = rowCells.filter(cell => 
+              cell.includes("nama") || cell.includes("nis") || cell.includes("siswa") || cell.includes("kelas") || cell.includes("hp") || cell.includes("telp") || cell.includes("wali") || cell.includes("ortu")
+            ).length;
+
+            if (matchCount >= 2) {
+              headerRowIndex = r;
+              break;
+            }
+          }
+
+          const rows = XLSX.utils.sheet_to_json(worksheet, { range: headerRowIndex });
           
           if (rows.length === 0) {
             throw new Error("File kosong atau tidak dapat diurai");
@@ -500,6 +555,7 @@ export default function StudentsPage() {
       reader.readAsArrayBuffer(file);
     }
   };
+
 
   // Client-side CSV export
   const handleExportCsv = () => {

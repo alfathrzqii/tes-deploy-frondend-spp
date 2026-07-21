@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/useAuthStore";
 import { api } from "@/lib/api";
 import {
@@ -60,6 +61,7 @@ const SCHOOL_UNITS = [
 
 export default function UnpaidPage() {
   const { user } = useAuthStore();
+  const [searchParams] = useSearchParams();
   const [unpaidData, setUnpaidData] = useState<UnpaidStudent[]>([]);
   const [summary, setSummary] = useState({
     grandTotalUnpaidAmount: 0,
@@ -70,14 +72,22 @@ export default function UnpaidPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filter States
+  // Filter States initialized from URL search params if present
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
   const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth() + 1);
-  const [filterUnitId, setFilterUnitId] = useState<string>("all");
-  const [filterClass, setFilterClass] = useState<string>("");
+  const [filterUnitId, setFilterUnitId] = useState<string>(searchParams.get("schoolUnitId") || "all");
+  const [filterClass, setFilterClass] = useState<string>(searchParams.get("className") || "");
 
   const isUnitAdmin = user?.role === "UNIT_ADMIN";
   const isWaliKelas = user?.role === "WALI_KELAS";
+
+  // Sync state if searchParams change
+  useEffect(() => {
+    const qUnitId = searchParams.get("schoolUnitId");
+    const qClassName = searchParams.get("className");
+    if (qUnitId) setFilterUnitId(qUnitId);
+    if (qClassName) setFilterClass(qClassName);
+  }, [searchParams]);
 
   const fetchUnpaidInvoices = async () => {
     setLoading(true);
