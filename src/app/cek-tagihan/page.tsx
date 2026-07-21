@@ -621,10 +621,10 @@ export default function CekTagihanPage() {
             <div className="bg-slate-50 px-6 py-5 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <span className="text-[9px] uppercase font-bold tracking-widest text-slate-400 block mb-0.5">
-                  SIMULASI SNAP GATEWAY
+                  GATEWAY PEMBAYARAN ONLINE
                 </span>
                 <h3 className="font-extrabold text-indigo-600 text-base flex items-center gap-1">
-                  midtrans <span className="text-slate-500 font-light text-[11px] border border-slate-300 px-1 py-0.2 rounded ml-1">Simulasi</span>
+                  SIKUAT <span className="text-slate-500 font-medium text-[11px] bg-slate-200/60 px-1.5 py-0.5 rounded ml-1">Pembayaran Resmi</span>
                 </h3>
               </div>
               <button
