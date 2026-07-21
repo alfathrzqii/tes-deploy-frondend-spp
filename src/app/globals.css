@@ -112,8 +112,16 @@ html:not(.dark) .text-amber-400 {
   color: #d97706 !important; /* amber-600 */
 }
 
-/* Print Styles for Official Receipt */
+/* Print Styles for Official Indonesian Paper Kwitansi */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
   body * {
     visibility: hidden;
   }
@@ -126,14 +134,26 @@ html:not(.dark) .text-amber-400 {
     top: 0;
     width: 100%;
     margin: 0;
-    padding: 20px;
+    padding: 28px;
     background: #ffffff !important;
-    color: #000000 !important;
+    color: #111827 !important;
     box-shadow: none !important;
-    border: none !important;
+    border: 2px solid #000000 !important;
+    border-radius: 6px !important;
+  }
+  #printable-receipt * {
+    color: #000000 !important;
+    background: transparent !important;
+    border-color: #333333 !important;
   }
   #printable-receipt .no-print {
     display: none !important;
+  }
+  #printable-receipt .print-border-box {
+    border: 2px solid #000000 !important;
+  }
+  #printable-receipt .print-header-line {
+    border-bottom: 3px double #000000 !important;
   }
 }
 
