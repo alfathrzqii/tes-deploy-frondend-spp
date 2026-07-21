@@ -916,15 +916,6 @@ export default function CekTagihanPage() {
                           <span>Cek Status Pembayaran</span>
                         )}
                       </button>
-
-                      {/* Simulasi Sandbox Button */}
-                      <button
-                        onClick={handleSimulatePakasirPayment}
-                        disabled={processingPayment || pakasirLoading || !pakasirData}
-                        className="w-full bg-slate-800 hover:bg-slate-900 text-slate-100 font-semibold text-xs py-2 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-60"
-                      >
-                        Simulasikan Bayar Lunas (Pakasir Sandbox)
-                      </button>
                     </>
                   )}
                 </div>
