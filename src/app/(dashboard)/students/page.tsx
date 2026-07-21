@@ -36,12 +36,7 @@ interface Student {
   };
 }
 
-const SCHOOL_UNITS = [
-  { id: 1, name: "KB" },
-  { id: 2, name: "RA" },
-  { id: 3, name: "SD" },
-  { id: 4, name: "TPA" },
-];
+import { SCHOOL_UNITS, ALL_PRESET_CLASSES, getClassesByUnitId } from "@/lib/classConstants";
 
 export default function StudentsPage() {
   const { user } = useAuthStore();
@@ -125,12 +120,12 @@ export default function StudentsPage() {
   const fetchUniqueClasses = async () => {
     try {
       const response = await api.get("/students");
-      const classes = Array.from(
-        new Set(response.data.data.map((s: any) => s.className))
-      ).filter(Boolean) as string[];
-      setAvailableClasses(classes.sort((a, b) => a.localeCompare(b)));
+      const fetchedClasses = (response.data.data || []).map((s: any) => s.className).filter(Boolean);
+      const combined = Array.from(new Set([...ALL_PRESET_CLASSES, ...fetchedClasses]));
+      setAvailableClasses(combined.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
     } catch (err) {
       console.error("Gagal mengambil daftar kelas", err);
+      setAvailableClasses(ALL_PRESET_CLASSES);
     }
   };
 
@@ -1020,13 +1015,18 @@ export default function StudentsPage() {
                     {user?.className}
                   </div>
                 ) : (
-                  <input
-                    type="text"
-                    placeholder="Contoh: 6A, RA-A, dll."
+                  <select
                     value={formClassName}
                     onChange={(e) => setFormClassName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-750 focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
+                    className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
+                  >
+                    <option value="">-- Pilih Kelas --</option>
+                    {getClassesByUnitId(formUnitId).map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
 

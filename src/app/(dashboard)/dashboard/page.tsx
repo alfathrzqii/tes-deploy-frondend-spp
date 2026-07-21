@@ -329,8 +329,8 @@ export default function DashboardPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold tracking-wider text-indigo-400 uppercase">
-                {getGreeting()}
+              <span className="text-xs font-bold tracking-wider text-amber-400 uppercase bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20">
+                Dashboard SIKUAT
               </span>
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase border bg-gradient-to-br ${
                 user ? getRoleBadgeColor(user.role) : ""
@@ -338,10 +338,13 @@ export default function DashboardPage() {
                 {user?.role.replace("_", " ")}
               </span>
             </div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">
-              {user?.name}
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Dashboard SIKUAT (Sistem Informasi Keuangan Al Uswah Terpadu)
             </h1>
-            <div className="flex items-center gap-2 text-slate-400 text-xs mt-2">
+            <p className="text-slate-400 text-xs font-medium">
+              {getGreeting()}, <span className="text-white font-semibold">{user?.name}</span>
+            </p>
+            <div className="flex items-center gap-2 text-slate-400 text-xs mt-1.5">
               <Calendar className="w-3.5 h-3.5 text-slate-500" />
               <span>{formattedDate}</span>
             </div>

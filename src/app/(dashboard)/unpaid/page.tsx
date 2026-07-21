@@ -52,12 +52,7 @@ const MONTHS = [
   { value: 12, name: "Desember" },
 ];
 
-const SCHOOL_UNITS = [
-  { id: 1, name: "KB" },
-  { id: 2, name: "RA" },
-  { id: 3, name: "SD" },
-  { id: 4, name: "TPA" },
-];
+import { SCHOOL_UNITS, ALL_PRESET_CLASSES, getClassesByUnitId } from "@/lib/classConstants";
 
 export default function UnpaidPage() {
   const { user } = useAuthStore();
@@ -327,15 +322,23 @@ _Sistem Keuangan Sekolah SPP_`;
             </select>
           )}
 
-          {/* Class query input (Hidden for Homeroom teacher bimbingan) */}
+          {/* Class query dropdown (Hidden for Homeroom teacher bimbingan) */}
           {!isWaliKelas && (
-            <input
-              type="text"
-              placeholder="Ketik nama kelas (e.g. 6A)..."
+            <select
               value={filterClass}
               onChange={(e) => setFilterClass(e.target.value)}
-              className="bg-slate-950 border border-slate-800 text-white px-3 py-1.5 rounded-lg text-[11px] placeholder:text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors w-40"
-            />
+              className="bg-slate-950 border border-slate-800 text-white px-3 py-1.5 rounded-lg text-[11px] focus:outline-none focus:border-indigo-500 transition-colors max-w-[180px]"
+            >
+              <option value="">Semua Kelas</option>
+              {(filterUnitId !== "all"
+                ? getClassesByUnitId(Number(filterUnitId))
+                : ALL_PRESET_CLASSES
+              ).map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           )}
         </div>
       </div>

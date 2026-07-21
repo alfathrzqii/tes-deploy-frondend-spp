@@ -113,12 +113,15 @@ export default function DashboardLayout() {
         <aside className="hidden lg:flex flex-col w-64 bg-slate-900/60 backdrop-blur-xl border-r border-slate-800/80 shrink-0 sticky top-0 h-screen z-20">
           {/* Sidebar Header / Logo */}
           <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-800/50">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-violet-600 text-white font-bold text-base shadow-md shadow-indigo-500/10">
-              S
+            <img src="/logo-sikuat.png" alt="SIKUAT Logo" className="w-9 h-9 object-contain" />
+            <div className="flex flex-col">
+              <span className="font-extrabold tracking-tight text-white text-sm leading-none">
+                SIKUAT
+              </span>
+              <span className="text-[9px] font-semibold text-amber-400/90 tracking-tight leading-tight mt-0.5 truncate max-w-[140px]">
+                Al Uswah Terpadu
+              </span>
             </div>
-            <span className="font-bold tracking-tight text-white text-sm">
-              SPP Management
-            </span>
           </div>
 
           {/* Sidebar Navigation */}
@@ -176,12 +179,15 @@ export default function DashboardLayout() {
         >
           <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800/80">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-violet-600 text-white font-bold text-base">
-                S
+              <img src="/logo-sikuat.png" alt="SIKUAT Logo" className="w-9 h-9 object-contain" />
+              <div className="flex flex-col">
+                <span className="font-extrabold tracking-tight text-white text-sm leading-none">
+                  SIKUAT
+                </span>
+                <span className="text-[9px] font-semibold text-amber-400/90 tracking-tight leading-tight mt-0.5">
+                  Al Uswah Terpadu
+                </span>
               </div>
-              <span className="font-bold tracking-tight text-white text-sm">
-                SPP Management
-              </span>
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
