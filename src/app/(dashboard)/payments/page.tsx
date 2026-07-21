@@ -84,6 +84,27 @@ const SCHOOL_UNITS = [
   { id: 4, name: "TPA" },
 ];
 
+function terbilang(nilai: number): string {
+  const angka = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
+  const count = Math.abs(Math.floor(nilai));
+
+  if (count < 12) return angka[count] || "";
+  if (count < 20) return terbilang(count - 10) + " Belas";
+  if (count < 100) return (terbilang(Math.floor(count / 10)) + " Puluh " + terbilang(count % 10)).trim();
+  if (count < 200) return ("Seratus " + terbilang(count - 100)).trim();
+  if (count < 1000) return (terbilang(Math.floor(count / 100)) + " Ratus " + terbilang(count % 100)).trim();
+  if (count < 2000) return ("Seribu " + terbilang(count - 1000)).trim();
+  if (count < 1000000) return (terbilang(Math.floor(count / 1000)) + " Ribu " + terbilang(count % 1000)).trim();
+  if (count < 1000000000) return (terbilang(Math.floor(count / 1000000)) + " Juta " + terbilang(count % 1000000)).trim();
+  return count.toString();
+}
+
+function formatTerbilang(amount: number): string {
+  if (!amount || amount <= 0) return "# Nol Rupiah #";
+  const words = terbilang(amount).trim();
+  return `# ${words} Rupiah #`;
+}
+
 export default function PaymentsPage() {
   const { user } = useAuthStore();
   
@@ -731,144 +752,121 @@ export default function PaymentsPage() {
               </button>
             </div>
 
-            {/* Printable Receipt Body */}
-            <div id="printable-receipt" className="p-6 space-y-6 text-xs bg-slate-900">
+            {/* Printable Receipt Body - Formal Indonesian Kwitansi Format */}
+            <div id="printable-receipt" className="p-6 space-y-5 text-xs bg-slate-900">
               
-              {/* Header Branding */}
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              {/* Kop Surat Resmi */}
+              <div className="flex items-center justify-between border-b-2 border-slate-700 pb-3 print-header-line">
                 <div className="flex items-center gap-3">
-                  <img src="/logo-sikuat.png" alt="SIKUAT Logo" className="w-12 h-12 object-contain" />
+                  <img src="/logo-sikuat.png" alt="SIKUAT Logo" className="w-14 h-14 object-contain" />
                   <div>
-                    <h2 className="text-base font-extrabold text-white tracking-tight leading-none">
-                      SIKUAT
+                    <h2 className="text-base font-black text-white tracking-tight uppercase leading-tight">
+                      YAYASAN AL USWAH TERPADU
                     </h2>
-                    <p className="text-[11px] font-bold text-amber-400 mt-0.5">
-                      Sistem Informasi Keuangan Al Uswah Terpadu
+                    <p className="text-xs font-extrabold text-amber-400">
+                      SISTEM INFORMASI KEUANGAN AL USWAH TERPADU (SIKUAT)
                     </p>
                     <p className="text-[9px] text-slate-400 mt-0.5">
-                      Yayasan Al Uswah Terpadu • Loket Kasir Tunai
+                      Jl. Al Uswah Terpadu • Telp: (031) 8900-123 • Email: sikuat@aluswah.sch.id
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                <div className="text-right border-l border-slate-800 pl-4">
+                  <span className="inline-block px-3 py-1 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                     {receiptData.status === "PAID" ? "LUNAS / SAH" : "TERBAYAR SEBAGIAN"}
                   </span>
-                  <p className="text-[10px] font-mono text-slate-400 mt-1">
-                    #INV-{receiptData.id || receiptData.invoiceId || "-"}
+                  <p className="text-[10px] font-mono text-slate-300 font-bold mt-1">
+                    No. Kwitansi: #KW-2026-{receiptData.id || receiptData.invoiceId || "-"}
                   </p>
                 </div>
               </div>
 
-              {/* Timestamp & Operator Info */}
-              <div className="grid grid-cols-2 gap-4 bg-slate-950/60 p-3 rounded-xl border border-slate-850 text-[11px]">
-                <div>
-                  <span className="text-slate-500 text-[10px] block">Waktu Pembayaran:</span>
-                  <span className="font-semibold text-slate-200">
-                    {new Date().toLocaleDateString("id-ID", {
-                      weekday: "long",
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                    })}
+              {/* Judul Dokumen */}
+              <div className="text-center pt-1 pb-1">
+                <h3 className="text-sm font-black text-white uppercase tracking-widest border-b border-indigo-500/30 inline-block pb-0.5">
+                  KUITANSI BUKTI PEMBAYARAN RESMI
+                </h3>
+              </div>
+
+              {/* Tabel Detail Kwitansi Formal */}
+              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-2.5 text-[11px] print-border-box">
+                <div className="grid grid-cols-12 gap-2">
+                  <span className="col-span-4 text-slate-400 font-semibold">Telah Diterima Dari</span>
+                  <span className="col-span-1 text-slate-500">:</span>
+                  <span className="col-span-7 font-bold text-white">{foundStudent.parent.name}</span>
+                </div>
+
+                <div className="grid grid-cols-12 gap-2">
+                  <span className="col-span-4 text-slate-400 font-semibold">Nama Siswa / NIS</span>
+                  <span className="col-span-1 text-slate-500">:</span>
+                  <span className="col-span-7 font-semibold text-slate-200">
+                    {foundStudent.name} <span className="font-mono text-indigo-400">({foundStudent.studentNumber})</span>
                   </span>
                 </div>
-                <div className="text-right">
-                  <span className="text-slate-500 text-[10px] block">Petugas Kasir:</span>
-                  <span className="font-semibold text-slate-200">{user?.name || "Admin Kasir"}</span>
+
+                <div className="grid grid-cols-12 gap-2">
+                  <span className="col-span-4 text-slate-400 font-semibold">Unit Sekolah & Kelas</span>
+                  <span className="col-span-1 text-slate-500">:</span>
+                  <span className="col-span-7 text-slate-200">
+                    Unit {getUnitName(foundStudent.schoolUnitId)} • Kelas {foundStudent.className}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-12 gap-2">
+                  <span className="col-span-4 text-slate-400 font-semibold">Guna Pembayaran</span>
+                  <span className="col-span-1 text-slate-500">:</span>
+                  <span className="col-span-7 font-bold text-emerald-400">
+                    {receiptData.invoiceType === "SPP" 
+                      ? `Pembayaran SPP Bulanan - ${MONTHS.find(m => m.value === receiptData.month)?.name} ${receiptData.year}`
+                      : `Cicilan Uang Pengembangan ${receiptData.year}`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-12 gap-2 border-t border-slate-850 pt-2.5">
+                  <span className="col-span-4 text-slate-400 font-semibold">Terbilang</span>
+                  <span className="col-span-1 text-slate-500">:</span>
+                  <span className="col-span-7 italic font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                    {formatTerbilang(Number(paymentAmount))}
+                  </span>
                 </div>
               </div>
 
-              {/* Student & Parent Info Table */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">
-                  Informasi Siswa & Pembayar:
-                </p>
-                <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800/80 space-y-2 text-[11px]">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Nama Siswa</span>
-                    <span className="font-bold text-white">{foundStudent.name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">NIS (Nomor Induk Siswa)</span>
-                    <span className="font-mono text-slate-200">{foundStudent.studentNumber}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Unit Sekolah & Kelas</span>
-                    <span className="font-semibold text-slate-200">
-                      Unit {getUnitName(foundStudent.schoolUnitId)} • Kelas {foundStudent.className}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Nama Ortu / Wali</span>
-                    <span className="text-slate-300">{foundStudent.parent.name} ({foundStudent.parent.phoneNumber})</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Payment Item Details */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">
-                  Rincian Tagihan SPP & Pembayaran:
-                </p>
-                <table className="w-full text-left border-collapse text-[11px]">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400">
-                      <th className="py-2">Item Pembayaran</th>
-                      <th className="py-2 text-right">Nominal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-850">
-                    <tr>
-                      <td className="py-2 text-slate-200">
-                        {receiptData.invoiceType === "SPP" 
-                          ? `SPP Bulanan - ${MONTHS.find(m => m.value === receiptData.month)?.name} ${receiptData.year}`
-                          : `Cicilan Uang Pengembangan ${receiptData.year}`}
-                      </td>
-                      <td className="py-2 text-right font-mono text-slate-200">
-                        {formatRupiah(receiptData.amount)}
-                      </td>
-                    </tr>
-                    {foundStudent.discountPercentage > 0 && receiptData.invoiceType === "SPP" && (
-                      <tr className="text-amber-400">
-                        <td className="py-1.5 italic">
-                          Potongan Beasiswa / Diskon ({foundStudent.discountPercentage}%)
-                        </td>
-                        <td className="py-1.5 text-right font-mono">
-                          Termasuk Diskon
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Total Summary Banner */}
-              <div className="bg-gradient-to-r from-emerald-950/40 via-emerald-900/20 to-slate-950 border border-emerald-500/30 p-4 rounded-2xl flex items-center justify-between">
+              {/* Banner Total Jumlah Rp */}
+              <div className="bg-gradient-to-r from-emerald-950/60 via-emerald-900/30 to-slate-950 border-2 border-emerald-500/40 p-4 rounded-xl flex items-center justify-between print-border-box">
                 <div>
-                  <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
-                    Total Tunai Diterima Kasir
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Jumlah Nominal Tunai Diterima
                   </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-[10px] text-emerald-400 font-semibold mt-0.5">
                     Metode: Tunai / Pembayaran Loket Offline
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="text-xl font-black text-emerald-400 font-mono">
+                  <span className="text-2xl font-black text-emerald-400 font-mono tracking-tight">
                     {formatRupiah(Number(paymentAmount))}
                   </span>
                 </div>
               </div>
 
-              {/* Footer Stamp & Signature */}
-              <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-500">
-                <div className="space-y-1">
-                  <p className="italic">Catatan: Simpan kwitansi ini sebagai bukti pembayaran tunai sah.</p>
-                  <p className="text-slate-600">Dicetak secara digital oleh SIKUAT Al Uswah Terpadu.</p>
+              {/* Tanda Tangan & Stempel Legalisasi */}
+              <div className="pt-4 border-t border-slate-800 grid grid-cols-2 gap-4 items-end text-[11px]">
+                <div className="space-y-1 text-[10px] text-slate-500">
+                  <p className="italic">Catatan:</p>
+                  <p className="text-slate-400">• Simpan kuitansi ini sebagai bukti pembayaran tunai sah.</p>
+                  <p className="text-slate-400">• Kuitansi ini dicetak secara digital oleh SIKUAT Al Uswah Terpadu.</p>
                 </div>
-                <div className="text-center font-semibold text-slate-400 border border-slate-800 px-4 py-2 rounded-xl bg-slate-950">
-                  <p className="text-emerald-400 font-bold">TERBAYAR LUNAS</p>
-                  <p className="text-[9px] text-slate-500 font-mono mt-0.5">KASIR SIKUAT</p>
+
+                <div className="text-center space-y-3">
+                  <p className="text-[10px] text-slate-400 font-semibold">
+                    Surabaya, {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                  </p>
+                  <div className="inline-block border-2 border-emerald-500/50 bg-emerald-500/10 px-4 py-1.5 rounded-lg text-center shadow-inner">
+                    <p className="text-xs font-black text-emerald-400 tracking-wider">TERBAYAR LUNAS</p>
+                    <p className="text-[9px] text-slate-400 font-mono mt-0.5">KASIR SIKUAT</p>
+                  </div>
+                  <p className="text-xs font-extrabold text-white underline decoration-slate-600">
+                    {user?.name || "Admin Kasir Keuangan"}
+                  </p>
                 </div>
               </div>
 
