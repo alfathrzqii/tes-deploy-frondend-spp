@@ -45,15 +45,17 @@ export default function SppTariffsPage() {
   const [formAmount, setFormAmount] = useState<string>("");
 
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const isUnitAdmin = user?.role === "UNIT_ADMIN";
+  const canManage = isSuperAdmin || isUnitAdmin;
 
   const fetchTariffs = async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await api.get("/spp-tariffs");
-      setTariffs(response.data.data);
+      setTariffs(response.data.data || []);
     } catch (err: any) {
-      setError(err.response?.data?.message || "Gagal mengambil data tarif dasar SPP");
+      setError(err.response?.data?.message || "Gagal mengambil daftar tarif SPP");
     } finally {
       setLoading(false);
     }
@@ -64,7 +66,7 @@ export default function SppTariffsPage() {
   }, []);
 
   const openCreateModal = () => {
-    if (!isSuperAdmin) return;
+    if (!canManage) return;
     setModalMode("create");
     setSelectedTariff(null);
     setFormUnitId(1);
@@ -74,7 +76,7 @@ export default function SppTariffsPage() {
   };
 
   const openEditModal = (tariff: SppTariff) => {
-    if (!isSuperAdmin) return;
+    if (!canManage) return;
     setModalMode("edit");
     setSelectedTariff(tariff);
     setFormUnitId(tariff.schoolUnitId);
@@ -85,7 +87,7 @@ export default function SppTariffsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isSuperAdmin) return;
+    if (!canManage) return;
     setError(null);
     setSuccessMsg(null);
 
@@ -96,19 +98,17 @@ export default function SppTariffsPage() {
     }
 
     try {
+      const payload = {
+        schoolUnitId: formUnitId,
+        enrollmentYear: formYear,
+        amount: amountNum,
+      };
+
       if (modalMode === "create") {
-        const payload = {
-          schoolUnitId: formUnitId,
-          enrollmentYear: formYear,
-          amount: amountNum,
-        };
         const response = await api.post("/spp-tariffs", payload);
         setSuccessMsg(response.data.message || "Tarif SPP berhasil ditambahkan");
       } else if (modalMode === "edit" && selectedTariff) {
-        // In backend, PUT /spp-tariffs/:id takes { amount }
-        const response = await api.put(`/spp-tariffs/${selectedTariff.id}`, {
-          amount: amountNum,
-        });
+        const response = await api.put(`/spp-tariffs/${selectedTariff.id}`, payload);
         setSuccessMsg(response.data.message || "Tarif SPP berhasil diperbarui");
       }
       setIsModalOpen(false);
@@ -119,7 +119,7 @@ export default function SppTariffsPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!isSuperAdmin) return;
+    if (!canManage) return;
     if (!confirm("Apakah Anda yakin ingin menghapus tarif SPP ini? Siswa yang terdaftar pada angkatan ini mungkin akan terdampak.")) {
       return;
     }
@@ -253,7 +253,7 @@ export default function SppTariffsPage() {
       </div>
 
       {/* Modal CRUD Dialog */}
-      {isModalOpen && isSuperAdmin && (
+      {isModalOpen && canManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl relative">
             <button
