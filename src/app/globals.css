@@ -112,3 +112,29 @@ html:not(.dark) .text-amber-400 {
   color: #d97706 !important; /* amber-600 */
 }
 
+/* Print Styles for Official Receipt */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+  }
+  #printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  #printable-receipt .no-print {
+    display: none !important;
+  }
+}
+
+

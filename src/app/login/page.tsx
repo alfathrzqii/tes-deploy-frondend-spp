@@ -64,15 +64,24 @@ function LoginForm() {
         
         {/* Logo / Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-600 text-white font-bold text-xl shadow-lg shadow-indigo-500/20 mb-3">
-            S
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">
-            SPP Sekolah
+          <img
+            src="/logo-sikuat.png"
+            alt="SIKUAT Logo"
+            className="w-20 h-20 mx-auto object-contain mb-3 drop-shadow-md"
+          />
+          <h1 className="text-3xl font-extrabold tracking-tight text-white">
+            SIKUAT
           </h1>
-          <p className="text-slate-400 text-xs mt-1">
-            Sistem Informasi Manajemen Keuangan & SPP
+          <p className="text-amber-400 font-semibold text-xs mt-1">
+            Sistem Informasi Keuangan Al Uswah Terpadu
           </p>
+          <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 mt-2.5 font-medium">
+            <span>🛡️ Amanah</span>
+            <span>•</span>
+            <span>📊 Transparan</span>
+            <span>•</span>
+            <span>👥 Terintegrasi</span>
+          </div>
         </div>
 
         {/* Errors Display */}
@@ -150,17 +159,6 @@ function LoginForm() {
           >
             Cek Tagihan & Bayar SPP Online (Tanpa Login) →
           </Link>
-        </div>
-
-        {/* Demo Credentials Alert Info */}
-        <div className="mt-8 border-t border-slate-800/80 pt-6 text-[11px] text-slate-500">
-          <p className="font-semibold text-slate-400 mb-1">Akun Demo Default:</p>
-          <ul className="list-disc pl-4 space-y-0.5">
-            <li>Super Admin: <span className="text-slate-300">0811111111</span> (password: <span className="text-slate-300">admin123</span>)</li>
-            <li>Admin SD: <span className="text-slate-300">0822222222</span> (password: <span className="text-slate-300">admin123</span>)</li>
-            <li>Wali Kelas 6A: <span className="text-slate-300">0833333333</span> (password: <span className="text-slate-300">admin123</span>)</li>
-            <li>Wali Murid Hendra: <span className="text-slate-300">081234567890</span> (password: <span className="text-slate-300">parent123</span>)</li>
-          </ul>
         </div>
       </div>
     </div>

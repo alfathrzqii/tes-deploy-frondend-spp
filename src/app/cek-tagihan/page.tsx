@@ -401,12 +401,17 @@ export default function CekTagihanPage() {
 
         {/* Hero Section */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-600 text-white font-bold text-xl shadow-lg shadow-indigo-500/20 mb-3">
-            S
-          </div>
+          <img
+            src="/logo-sikuat.png"
+            alt="SIKUAT Logo"
+            className="w-24 h-24 mx-auto object-contain mb-3 drop-shadow-lg"
+          />
           <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-            Cek Tagihan & Pembayaran SPP Online
+            SIKUAT - Pembayaran SPP Online
           </h1>
+          <p className="text-amber-400 font-semibold text-xs mt-1">
+            Sistem Informasi Keuangan Al Uswah Terpadu
+          </p>
           <p className="text-slate-400 text-sm mt-2 max-w-md mx-auto">
             Masukkan Nomor Induk Siswa (NIS) untuk melihat rincian tagihan bulanan dan melakukan pembayaran SPP secara instant.
           </p>

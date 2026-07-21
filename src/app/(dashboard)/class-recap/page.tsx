@@ -47,12 +47,7 @@ const MONTHS = [
   { value: 12, name: "Desember" },
 ];
 
-const SCHOOL_UNITS = [
-  { id: 1, name: "KB" },
-  { id: 2, name: "RA" },
-  { id: 3, name: "SD" },
-  { id: 4, name: "TPA" },
-];
+import { SCHOOL_UNITS } from "@/lib/classConstants";
 
 export default function ClassRecapPage() {
   const { user } = useAuthStore();
