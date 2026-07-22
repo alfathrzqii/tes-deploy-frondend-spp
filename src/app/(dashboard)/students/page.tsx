@@ -362,6 +362,7 @@ export default function StudentsPage() {
         const rawPhone = findVal(["hportu", "parentphone", "nohp", "notelp", "nowa", "whatsapp", "wa", "telp", "phone", "hp", "kontak", "telepon", "handphone"]);
         const rawSpp = findVal(["besaranspp", "sppamount", "spp"]);
         const rawDiscount = findVal(["diskonspp", "diskon", "discount"]);
+        const rawAngkatan = findVal(["angkatan", "enrollmentyear", "tahunmasuk", "tahunangkatan", "tahun", "year"]);
 
         // If Student Name column is missing, fallback to Parent/Guardian Name
         if (!name) {
@@ -400,6 +401,15 @@ export default function StudentsPage() {
           birthDateStr = tanggalLahir.toString().trim();
         }
 
+        // Clean enrollment year
+        let enrollmentYear = new Date().getFullYear();
+        if (rawAngkatan) {
+          const parsedYear = parseInt(rawAngkatan.toString().trim().replace(/[^0-9]/g, ""));
+          if (!isNaN(parsedYear) && parsedYear >= 2000 && parsedYear <= 9999) {
+            enrollmentYear = parsedYear;
+          }
+        }
+
         // Parse discount percentage
         let discountPercentage = 0;
         if (rawDiscount) {
@@ -431,7 +441,7 @@ export default function StudentsPage() {
           nama: name.toString().trim(),
           kelas: className || "KB",
           unit: unitName,
-          angkatan: new Date().getFullYear(),
+          angkatan: enrollmentYear,
           diskon: discountPercentage,
           tanggal_lahir: birthDateStr,
           nama_ortu: parentName || `Orang Tua ${name}`,
