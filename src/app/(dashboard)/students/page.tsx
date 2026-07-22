@@ -607,29 +607,7 @@ export default function StudentsPage() {
     return SCHOOL_UNITS.find((u) => u.id === unitId)?.name || `Unit ${unitId}`;
   };
 
-  // Wipe all dummy data state (Super Admin only)
-  const [showWipeModal, setShowWipeModal] = useState(false);
-  const [wipeConfirmInput, setWipeConfirmInput] = useState("");
-  const [wipeLoading, setWipeLoading] = useState(false);
 
-  const handleWipeAllData = async () => {
-    if (wipeConfirmInput !== "HAPUS") return;
-    setWipeLoading(true);
-    setError(null);
-    setSuccessMsg(null);
-
-    try {
-      const response = await api.delete("/students/wipe-all-dummy-data");
-      setSuccessMsg(response.data.message || "Seluruh data dummy berhasil dibersihkan");
-      setShowWipeModal(false);
-      setWipeConfirmInput("");
-      fetchStudents();
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Gagal membersihkan data dummy");
-    } finally {
-      setWipeLoading(false);
-    }
-  };
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
@@ -646,19 +624,7 @@ export default function StudentsPage() {
         </div>
 
         <div className="flex gap-2 self-start sm:self-auto flex-wrap">
-          {user?.role === "SUPER_ADMIN" && (
-            <button
-              onClick={() => {
-                setWipeConfirmInput("");
-                setShowWipeModal(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-500/30 rounded-xl text-xs font-semibold shadow-md transition-all cursor-pointer"
-              title="Bersihkan seluruh data dummy siswa & transaksi dari database"
-            >
-              <Trash2 className="w-4 h-4 text-red-400" />
-              Reset Data Dummy
-            </button>
-          )}
+
 
           <button
             onClick={handleExportCsv}
@@ -1212,73 +1178,7 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Modal Reset / Wipe All Dummy Data */}
-      {showWipeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md bg-slate-900 border border-red-500/40 rounded-2xl shadow-2xl p-6 space-y-5 relative text-slate-100">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400">
-                  <Trash2 className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-white">Reset Semua Data Dummy?</h3>
-                  <p className="text-xs text-red-400 font-semibold mt-0.5">Tindakan ini tidak dapat dibatalkan!</p>
-                </div>
-              </div>
-              <button onClick={() => setShowWipeModal(false)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="text-xs text-slate-300 space-y-2 bg-slate-950 p-4 rounded-xl border border-slate-800">
-              <p className="font-semibold text-slate-200">Tindakan ini akan menghapus permanen:</p>
-              <ul className="list-disc pl-4 space-y-1 text-slate-400">
-                <li>Seluruh data Siswa yang terdaftar</li>
-                <li>Seluruh riwayat Tagihan (SPP & Uang Pengembangan)</li>
-                <li>Seluruh riwayat Transaksi Pembayaran Kasir & Online</li>
-                <li>Seluruh akun Orang Tua / Wali murid test</li>
-              </ul>
-              <p className="text-[11px] text-amber-400 pt-1 font-semibold">
-                Akun Super Admin & Admin Unit Sekolah Anda akan tetap AMAN dan tidak terhapus.
-              </p>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <label className="font-semibold text-slate-200 block">
-                Ketik kata <span className="font-mono text-red-400 font-bold">HAPUS</span> untuk konfirmasi:
-              </label>
-              <input
-                type="text"
-                placeholder="Ketik HAPUS di sini..."
-                value={wipeConfirmInput}
-                onChange={(e) => setWipeConfirmInput(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg font-mono text-xs focus:outline-none focus:border-red-500"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={() => setShowWipeModal(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleWipeAllData}
-                disabled={wipeConfirmInput !== "HAPUS" || wipeLoading}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer"
-              >
-                {wipeLoading ? (
-                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                ) : (
-                  "Ya, Hapus Semua Data"
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
