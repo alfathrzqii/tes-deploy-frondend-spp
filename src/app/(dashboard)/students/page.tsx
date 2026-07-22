@@ -212,8 +212,13 @@ export default function StudentsPage() {
         const payload = {
           name: formName.trim(),
           className: formClassName.trim(),
+          schoolUnitId: formUnitId,
+          enrollmentYear: formYear,
           discountPercentage: Number(formDiscount),
           birthDate: formBirthDate || null,
+          parentName: formParentName.trim(),
+          parentEmail: formParentEmail.trim() || null,
+          parentPhoneNumber: formParentPhoneNumber.trim(),
         };
         const response = await api.put(`/students/${selectedStudent.id}`, payload);
         setSuccessMsg(response.data.message || "Data siswa berhasil diperbarui");
@@ -1081,31 +1086,25 @@ export default function StudentsPage() {
                 )}
               </div>
 
-              {/* School Unit selection (Only configured on create) */}
+              {/* School Unit selection */}
               <div className="space-y-1.5">
                 <label className="font-semibold text-slate-300">Unit Sekolah</label>
-                {modalMode === "create" ? (
-                  isUnitAdmin || isWaliKelas ? (
-                    <div className="bg-slate-950/50 border border-slate-850 p-2.5 rounded-lg text-slate-400">
-                      Unit {getUnitName(formUnitId)}
-                    </div>
-                  ) : (
-                    <select
-                      value={formUnitId}
-                      onChange={(e) => setFormUnitId(Number(e.target.value))}
-                      className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
-                    >
-                      {SCHOOL_UNITS.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                    </select>
-                  )
-                ) : (
+                {isUnitAdmin || isWaliKelas ? (
                   <div className="bg-slate-950/50 border border-slate-850 p-2.5 rounded-lg text-slate-400">
-                    {getUnitName(formUnitId)}
+                    Unit {getUnitName(formUnitId)}
                   </div>
+                ) : (
+                  <select
+                    value={formUnitId}
+                    onChange={(e) => setFormUnitId(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
+                  >
+                    {SCHOOL_UNITS.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </div>
 
@@ -1120,23 +1119,17 @@ export default function StudentsPage() {
                 />
               </div>
 
-              {/* Enrollment Year field (Only configured on create) */}
+              {/* Enrollment Year field */}
               <div className="space-y-1.5">
                 <label className="font-semibold text-slate-300">Tahun Angkatan Masuk</label>
-                {modalMode === "create" ? (
-                  <input
-                    type="number"
-                    min="2000"
-                    max="9999"
-                    value={formYear}
-                    onChange={(e) => setFormYear(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
-                ) : (
-                  <div className="bg-slate-950/50 border border-slate-850 p-2.5 rounded-lg text-slate-400">
-                    Angkatan {formYear}
-                  </div>
-                )}
+                <input
+                  type="number"
+                  min="2000"
+                  max="9999"
+                  value={formYear}
+                  onChange={(e) => setFormYear(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
+                />
               </div>
 
               {/* SPP Discount Percentage field */}
@@ -1156,8 +1149,6 @@ export default function StudentsPage() {
               <div className="pt-2 border-t border-slate-800/80 mt-4 space-y-3">
                 <p className="font-bold text-white">Informasi Orang Tua / Wali Murid</p>
                 
-                {modalMode === "create" ? (
-                  <>
                     <div className="space-y-1.5">
                       <label className="font-semibold text-slate-300">Nama Lengkap Wali</label>
                       <input
@@ -1188,19 +1179,6 @@ export default function StudentsPage() {
                         className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-750 focus:outline-none focus:border-indigo-500 transition-colors"
                       />
                     </div>
-                  </>
-                ) : (
-                  <div className="bg-slate-950/50 border border-slate-850 p-2.5 rounded-lg text-slate-400 space-y-1.5">
-                    <p className="font-semibold text-slate-350">{formParentName}</p>
-                    <p className="text-[10px] text-slate-500">No. HP: <span className="font-mono text-slate-400">{formParentPhoneNumber}</span></p>
-                    {formParentEmail && (
-                      <p className="text-[10px] text-slate-500">Email: <span className="font-mono text-slate-400">{formParentEmail}</span></p>
-                    )}
-                    <p className="text-[10px] text-slate-500/80 italic pt-1 border-t border-slate-900 mt-2">
-                      Catatan: Info akun login wali murid dapat dikelola melalui menu Manajemen Pengguna.
-                    </p>
-                  </div>
-                )}
               </div>
 
               {/* Submit Buttons */}
