@@ -222,7 +222,14 @@ export default function StudentsPage() {
       fetchStudents();
       fetchUniqueClasses();
     } catch (err: any) {
-      setError(err.response?.data?.message || "Gagal menyimpan data siswa");
+      const serverMsg = err.response?.data?.message;
+      const validationErrors = err.response?.data?.errors;
+      if (validationErrors && Array.isArray(validationErrors)) {
+        const detailMsg = validationErrors.map((e: any) => `${e.field.replace("body.", "")}: ${e.message}`).join(", ");
+        setError(`${serverMsg} (${detailMsg})`);
+      } else {
+        setError(serverMsg || "Gagal menyimpan data siswa");
+      }
     }
   };
 
