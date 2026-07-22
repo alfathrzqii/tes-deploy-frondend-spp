@@ -189,8 +189,8 @@ export default function StudentsPage() {
 
     try {
       if (modalMode === "create") {
-        if (!formNis.trim()) {
-          setError("Nomor induk siswa (NIS) wajib diisi");
+        if (!/^\d{4}$/.test(formNis.trim())) {
+          setError("Nomor induk siswa (NIS) harus berupa 4 digit angka (contoh: 1234)");
           return;
         }
 
@@ -867,7 +867,7 @@ export default function StudentsPage() {
               <ul className="list-disc pl-5 space-y-1 text-slate-400 text-[11px]">
                 <li>Dukungan file: <b>Excel (.xlsx, .xls)</b> atau <b>CSV (.csv)</b>.</li>
                 <li>Kolom yang dibaca: <b>Nama Siswa</b>, <b>Kelas</b>, <b>Nama Orang Tua</b>, <b>Telp</b>, <b>Besaran spp</b>, <b>Diskon spp</b>, dan <b>NISN/NIS</b> (opsional).</li>
-                <li>Jika <b>NISN/NIS</b> kosong, NIS akan otomatis digenerate (contoh: `KB-2026-001`).</li>
+                <li>Jika <b>NISN/NIS</b> kosong, NIS akan otomatis digenerate (contoh: `1001`).</li>
                 <li>Jika <b>No. Telp Wali</b> kosong, nomor dummy unik akan otomatis dibuatkan.</li>
                 <li>Diskon SPP berupa teks seperti <i>"kakak beradik"</i> akan otomatis divalidasi ke 10%, sedangkan nominal (seperti 85.000) akan dikonversi ke persentase secara otomatis.</li>
               </ul>
@@ -897,7 +897,7 @@ export default function StudentsPage() {
                   <label className="font-semibold text-slate-300">Teks CSV Data Siswa</label>
                   <textarea
                     rows={6}
-                    placeholder="nis,nama,kelas,unit,angkatan,diskon,tanggal_lahir,nama_ortu,hp_ortu,email_ortu&#10;SD-2026-999,Ananda Pradana,6A,SD,2024,0,12-10-2014,Agus Pradana,089999999999,agus@test.com"
+                    placeholder="nis,nama,kelas,unit,angkatan,diskon,tanggal_lahir,nama_ortu,hp_ortu,email_ortu&#10;1234,Ananda Pradana,6A,SD,2024,0,12-10-2014,Agus Pradana,089999999999,agus@test.com"
                     value={csvText}
                     onChange={(e) => setCsvText(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 text-white p-3 rounded-lg font-mono placeholder:text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
@@ -1021,10 +1021,16 @@ export default function StudentsPage() {
                 {modalMode === "create" ? (
                   <input
                     type="text"
-                    placeholder="Contoh: SD-2025-098"
+                    maxLength={4}
+                    placeholder="Contoh: 1234"
                     value={formNis}
-                    onChange={(e) => setFormNis(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-750 focus:outline-none focus:border-indigo-500 transition-colors"
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, "");
+                      if (val.length <= 4) {
+                        setFormNis(val);
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-750 focus:outline-none focus:border-indigo-500 transition-colors font-mono"
                   />
                 ) : (
                   <div className="bg-slate-950/50 border border-slate-850 p-2.5 rounded-lg text-slate-400 font-mono">
