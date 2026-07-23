@@ -223,12 +223,11 @@ export default function DashboardPage() {
       `- *Nominal:* ${amountStr}\n\n` +
       `Berikut saya lampirkan bukti transfer. Terima kasih.`;
 
-    return `https://wa.me/6285741660007?text=${encodeURIComponent(message)}`;
+    return `https://wa.me/6289678331076?text=${encodeURIComponent(message)}`;
   };
 
-  const handleWhatsAppRedirect = async () => {
+  const handleWhatsAppRedirect = () => {
     window.open(getWhatsAppLink(), "_blank");
-    await handleSimulatePayment();
   };
 
   const copyToClipboard = (text: string) => {
@@ -1024,7 +1023,7 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         <p className="text-[9px] text-slate-500 leading-normal">
-                          Silakan transfer ke rekening BSI di atas. Setelah transfer, klik tombol di bawah untuk mengirimkan bukti transfer via WhatsApp ke nomor +62 857-4166-0007.
+                          Silakan transfer ke rekening BSI di atas. Setelah transfer, klik tombol di bawah untuk mengirimkan bukti transfer via WhatsApp ke nomor +62 896-7833-1076.
                         </p>
                       </div>
                     ) : (
