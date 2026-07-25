@@ -27,7 +27,7 @@ interface Student {
   schoolUnitId: number;
   parentId: number;
   enrollmentYear: number;
-  discountPercentage: number;
+  discountAmount: number;
   birthDate?: string | null;
   parent: {
     name: string;
@@ -40,6 +40,14 @@ import { SCHOOL_UNITS, ALL_PRESET_CLASSES, getClassesByUnitId } from "@/lib/clas
 
 export default function StudentsPage() {
   const { user } = useAuthStore();
+  const formatRupiah = (value: number) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -168,7 +176,7 @@ export default function StudentsPage() {
     setFormClassName(student.className);
     setFormUnitId(student.schoolUnitId);
     setFormYear(student.enrollmentYear);
-    setFormDiscount(student.discountPercentage);
+    setFormDiscount(student.discountAmount);
     setFormBirthDate(student.birthDate || "");
     setFormParentName(student.parent.name);
     setFormParentEmail(student.parent.email || "");
@@ -200,7 +208,7 @@ export default function StudentsPage() {
           className: formClassName.trim(),
           schoolUnitId: formUnitId,
           enrollmentYear: formYear,
-          discountPercentage: Number(formDiscount),
+          discountAmount: Number(formDiscount),
           birthDate: formBirthDate || null,
           parentName: formParentName.trim(),
           parentEmail: formParentEmail.trim() || null,
@@ -214,7 +222,7 @@ export default function StudentsPage() {
           className: formClassName.trim(),
           schoolUnitId: formUnitId,
           enrollmentYear: formYear,
-          discountPercentage: Number(formDiscount),
+          discountAmount: Number(formDiscount),
           birthDate: formBirthDate || null,
           parentName: formParentName.trim(),
           parentEmail: formParentEmail.trim() || null,
@@ -410,20 +418,20 @@ export default function StudentsPage() {
           }
         }
 
-        // Parse discount percentage
-        let discountPercentage = 0;
+        // Parse discount amount
+        let discountAmount = 0;
         if (rawDiscount) {
           const valStr = rawDiscount.toString().trim().toLowerCase();
           const sppAmount = Number(rawSpp) || 185000;
           if (valStr.includes("beradik") || valStr.includes("kakak")) {
-            discountPercentage = 10;
+            discountAmount = Math.round(sppAmount * 0.1);
           } else {
             const numVal = parseFloat(valStr);
             if (!isNaN(numVal)) {
               if (numVal <= 100) {
-                discountPercentage = Math.round(numVal);
-              } else if (sppAmount > 0) {
-                discountPercentage = Math.round((numVal / sppAmount) * 100);
+                discountAmount = Math.round(sppAmount * (numVal / 100));
+              } else {
+                discountAmount = Math.round(numVal);
               }
             }
           }
@@ -442,7 +450,7 @@ export default function StudentsPage() {
           kelas: className || "KB",
           unit: unitName,
           angkatan: enrollmentYear,
-          diskon: discountPercentage,
+          diskon: discountAmount,
           tanggal_lahir: birthDateStr,
           nama_ortu: parentName || `Orang Tua ${name}`,
           hp_ortu: parentPhoneNumber,
@@ -583,7 +591,7 @@ export default function StudentsPage() {
       s.className,
       getUnitName(s.schoolUnitId),
       s.enrollmentYear,
-      s.discountPercentage,
+      s.discountAmount,
       s.birthDate || "",
       s.parent.name,
       s.parent.phoneNumber || "",
@@ -790,11 +798,11 @@ export default function StudentsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                        student.discountPercentage > 0
+                        student.discountAmount > 0
                           ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                           : "bg-slate-800/60 text-slate-500 border-slate-700/60"
                       }`}>
-                        {student.discountPercentage}%
+                        {formatRupiah(student.discountAmount)}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -1108,13 +1116,13 @@ export default function StudentsPage() {
                 />
               </div>
 
-              {/* SPP Discount Percentage field */}
+              {/* SPP Discount Amount field */}
               <div className="space-y-1.5">
-                <label className="font-semibold text-slate-300">Diskon Potongan SPP (%)</label>
+                <label className="font-semibold text-slate-300">Nominal Diskon SPP (Rupiah)</label>
                 <input
                   type="number"
                   min="0"
-                  max="100"
+                  placeholder="Contoh: 20000"
                   value={formDiscount}
                   onChange={(e) => setFormDiscount(Number(e.target.value))}
                   className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"

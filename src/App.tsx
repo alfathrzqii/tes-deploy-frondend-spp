@@ -7,6 +7,7 @@ import CategoriesPage from "./app/(dashboard)/categories/page";
 import SppTariffsPage from "./app/(dashboard)/spp-tariffs/page";
 import StudentsPage from "./app/(dashboard)/students/page";
 import PaymentsPage from "./app/(dashboard)/payments/page";
+import InvoicesPage from "./app/(dashboard)/invoices/page";
 import UnpaidPage from "./app/(dashboard)/unpaid/page";
 import ClassRecapPage from "./app/(dashboard)/class-recap/page";
 import TransactionsPage from "./app/(dashboard)/transactions/page";
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/spp-tariffs" element={<SppTariffsPage />} />
           <Route path="/students" element={<StudentsPage />} />
           <Route path="/payments" element={<PaymentsPage />} />
+          <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/unpaid" element={<UnpaidPage />} />
           <Route path="/class-recap" element={<ClassRecapPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />

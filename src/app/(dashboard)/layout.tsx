@@ -19,7 +19,8 @@ import {
   CreditCard,
   TrendingDown,
   PieChart,
-  Shield
+  Shield,
+  Receipt
 } from "lucide-react";
 
 export default function DashboardLayout() {
@@ -75,6 +76,12 @@ export default function DashboardLayout() {
       name: "Pembayaran SPP",
       href: "/payments",
       icon: CreditCard,
+      allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN"],
+    },
+    {
+      name: "Daftar Invoice",
+      href: "/invoices",
+      icon: Receipt,
       allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN"],
     },
     {

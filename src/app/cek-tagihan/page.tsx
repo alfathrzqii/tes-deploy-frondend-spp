@@ -29,7 +29,7 @@ interface StudentInfo {
   studentNumber: string;
   name: string;
   enrollmentYear: number;
-  discountPercentage: number;
+  discountAmount: number;
   schoolUnit: {
     name: string;
   };
@@ -130,7 +130,7 @@ export default function CekTagihanPage() {
             studentNumber: studentNumber.trim(),
             name: "Siswa Terdaftar",
             enrollmentYear: response.data.data[0].year,
-            discountPercentage: 0,
+            discountAmount: 0,
             schoolUnit: { name: "Unit Sekolah" },
             parent: { name: "-", email: "-" }
           });
@@ -516,10 +516,10 @@ export default function CekTagihanPage() {
                 <p className="text-xs text-slate-400">
                   Wali: <span className="text-slate-200 font-medium">{student.parent?.name}</span> ({student.parent?.email})
                 </p>
-                {student.discountPercentage > 0 && (
+                {student.discountAmount > 0 && (
                   <div className="inline-flex md:self-end items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold text-emerald-400">
                     <Percent className="w-3 h-3" />
-                    Potongan SPP {student.discountPercentage}%
+                    Potongan SPP {formatRupiah(student.discountAmount)}
                   </div>
                 )}
               </div>

@@ -27,7 +27,7 @@ interface Student {
   schoolUnitId: number;
   parentId: number;
   enrollmentYear: number;
-  discountPercentage: number;
+  discountAmount: number;
   parent: {
     name: string;
     phoneNumber: string;
@@ -157,8 +157,8 @@ export default function PaymentsPage() {
       
       // Auto-set payment amount based on tariff discount
       if (match && invoiceType === "SPP") {
-        const discount = foundStudent.discountPercentage || 0;
-        const netAmount = match.amount * (1 - discount / 100);
+        const discount = foundStudent.discountAmount || 0;
+        const netAmount = Math.max(0, match.amount - discount);
         setPaymentAmount(String(netAmount));
       }
     }
@@ -255,8 +255,8 @@ export default function PaymentsPage() {
   // Calculate Net estimation
   const getEstimatedAmount = () => {
     if (!matchingTariff) return 0;
-    const discount = foundStudent ? foundStudent.discountPercentage : 0;
-    return matchingTariff.amount * (1 - discount / 100);
+    const discount = foundStudent ? foundStudent.discountAmount : 0;
+    return Math.max(0, matchingTariff.amount - discount);
   };
 
   // Check selected month SPP invoice details
@@ -439,10 +439,10 @@ export default function PaymentsPage() {
                 </div>
 
                 {/* Potongan SPP Alert */}
-                {foundStudent.discountPercentage > 0 && (
+                {foundStudent.discountAmount > 0 && (
                   <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg text-[11px] text-amber-400 flex items-center gap-2">
                     <Calculator className="w-4 h-4 shrink-0" />
-                    <span>Siswa ini mendapatkan potongan tarif SPP sebesar <b>{foundStudent.discountPercentage}%</b>.</span>
+                    <span>Siswa ini mendapatkan potongan tarif SPP sebesar <b>{formatRupiah(foundStudent.discountAmount)}</b>.</span>
                   </div>
                 )}
               </div>
@@ -539,11 +539,11 @@ export default function PaymentsPage() {
                           {matchingTariff ? formatRupiah(matchingTariff.amount) : "Belum Diatur"}
                         </span>
                       </div>
-                      {foundStudent.discountPercentage > 0 && (
+                      {foundStudent.discountAmount > 0 && (
                         <div className="flex justify-between items-center text-amber-400 font-semibold">
-                          <span>Diskon SPP ({foundStudent.discountPercentage}%)</span>
+                          <span>Potongan Diskon SPP</span>
                           <span className="font-mono">
-                            -{matchingTariff ? formatRupiah(matchingTariff.amount * (foundStudent.discountPercentage / 100)) : 0}
+                            -{formatRupiah(foundStudent.discountAmount)}
                           </span>
                         </div>
                       )}
@@ -732,6 +732,138 @@ export default function PaymentsPage() {
         </div>
 
       </div>
+
+      {/* Daftar Tagihan Siswa Section */}
+      {foundStudent && (
+        <div className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-2xl space-y-4 backdrop-blur-md">
+          <h2 className="text-base font-bold text-white flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-indigo-400" />
+            Daftar Tagihan & Status Pembayaran (Tahun Ajaran/Kalender {selectedYear})
+          </h2>
+          <p className="text-xs text-slate-400">
+            Daftar seluruh tagihan aktif untuk siswa ini. Admin dapat secara langsung mengubah status pembayaran atau menghapus data pembayaran untuk melakukan reset.
+          </p>
+
+          <div className="overflow-x-auto border border-slate-800/60 rounded-xl">
+            {studentInvoices.length === 0 ? (
+              <p className="p-8 text-center text-xs text-slate-500">Tidak ada tagihan yang ditemukan untuk tahun {selectedYear}.</p>
+            ) : (
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-950/40 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="px-4 py-3">Tagihan</th>
+                    <th className="px-4 py-3">Bulan/Tahun</th>
+                    <th className="px-4 py-3 text-right">Nominal Tagihan</th>
+                    <th className="px-4 py-3 text-center">Status</th>
+                    <th className="px-4 py-3 text-center">Aksi Administrasi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/40 text-slate-300">
+                  {studentInvoices.map((inv) => {
+                    const isPaid = inv.status === "PAID";
+                    return (
+                      <tr key={`${inv.invoiceType}-${inv.month}-${inv.year}`} className="hover:bg-slate-800/10">
+                        <td className="px-4 py-3 font-semibold text-white">
+                          {inv.invoiceType === "SPP" ? "SPP Bulanan" : "Uang Pengembangan"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {inv.invoiceType === "SPP" ? `${MONTHS.find(m => m.value === inv.month)?.name} ${inv.year}` : `Tahun ${inv.year}`}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-200">
+                          {formatRupiah(inv.amount)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            inv.status === "PAID"
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              : inv.status === "PARTIALLY_PAID"
+                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                              : "bg-red-500/10 text-red-400 border border-red-500/20"
+                          }`}>
+                            {inv.status === "PAID" ? "Lunas" : inv.status === "PARTIALLY_PAID" ? "Dicicil" : "Belum Lunas"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            {!isPaid ? (
+                              <button
+                                onClick={async () => {
+                                  if (confirm(`Apakah Anda yakin ingin menandai tagihan ini sebagai LUNAS?`)) {
+                                    try {
+                                      if (inv.id) {
+                                        await api.put(`/invoices/${inv.id}/status`, { status: "PAID" });
+                                      } else {
+                                        // Virtual invoice, create by paying offline
+                                        await api.post("/invoices/pay-offline", {
+                                          studentNumber: foundStudent.studentNumber,
+                                          month: inv.month,
+                                          year: inv.year,
+                                          invoiceType: inv.invoiceType,
+                                          paymentAmount: inv.amount,
+                                        });
+                                      }
+                                      // Refresh student invoices
+                                      const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
+                                      setStudentInvoices(invResponse.data.allInvoices || []);
+                                      setSuccessMsg("Status pembayaran berhasil diubah menjadi Lunas!");
+                                    } catch (err: any) {
+                                      alert(err.response?.data?.message || "Gagal mengubah status");
+                                    }
+                                  }
+                                }}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
+                              >
+                                Set Lunas
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={async () => {
+                                    if (confirm(`Apakah Anda yakin ingin membatalkan pelunasan tagihan ini (Set Belum Lunas)? Semua riwayat transaksi kasir untuk tagihan ini akan terhapus.`)) {
+                                      try {
+                                        await api.put(`/invoices/${inv.id}/status`, { status: "PENDING" });
+                                        const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
+                                        setStudentInvoices(invResponse.data.allInvoices || []);
+                                        setSuccessMsg("Status pembayaran berhasil diubah menjadi Belum Lunas!");
+                                      } catch (err: any) {
+                                        alert(err.response?.data?.message || "Gagal mengubah status");
+                                      }
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
+                                >
+                                  Set Belum Lunas
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (confirm(`Apakah Anda yakin ingin MENGHAPUS data tagihan beserta riwayat transaksinya dari database? Tindakan ini tidak dapat dibatalkan.`)) {
+                                      try {
+                                        await api.delete(`/invoices/${inv.id}`);
+                                        const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
+                                        setStudentInvoices(invResponse.data.allInvoices || []);
+                                        setSuccessMsg("Data tagihan berhasil dihapus sepenuhnya!");
+                                      } catch (err: any) {
+                                        alert(err.response?.data?.message || "Gagal menghapus tagihan");
+                                      }
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
+                                >
+                                  Hapus Tagihan
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Pop-Up Modal Official Nota Pembayaran SIKUAT */}
       {showReceiptModal && receiptData && foundStudent && (

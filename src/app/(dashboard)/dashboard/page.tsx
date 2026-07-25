@@ -633,9 +633,9 @@ export default function DashboardPage() {
                         </p>
                       </div>
                       
-                      {child.discountPercentage > 0 && (
+                      {child.discountAmount > 0 && (
                         <span className="px-2.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/15 text-[10px] font-bold self-start sm:self-auto">
-                          Potongan SPP: {child.discountPercentage}%
+                          Potongan SPP: {formatRupiah(child.discountAmount)}
                         </span>
                       )}
                     </div>
