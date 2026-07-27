@@ -444,10 +444,30 @@ export default function StudentsPage() {
 
         // Map class to unit
         let unitName = "SD";
-        const cleanClassUpper = className ? className.toString().toUpperCase() : "";
-        if (cleanClassUpper.includes("KB")) unitName = "KB";
-        else if (cleanClassUpper.includes("RA")) unitName = "RA";
-        else if (cleanClassUpper.includes("TPA")) unitName = "TPA";
+        const rawUnit = findVal(["unit", "schoolunit", "unitsekolah", "jenjang", "lembaga"]);
+        if (rawUnit) {
+          const cleanUnitUpper = rawUnit.toString().trim().toUpperCase();
+          if (cleanUnitUpper.includes("KB")) unitName = "KB";
+          else if (cleanUnitUpper.includes("RA")) unitName = "RA";
+          else if (cleanUnitUpper.includes("SD")) unitName = "SD";
+          else if (cleanUnitUpper.includes("TPA")) unitName = "TPA";
+        } else {
+          const cleanClassUpper = className ? className.toString().toUpperCase() : "";
+          if (cleanClassUpper.includes("KB")) {
+            unitName = "KB";
+          } else if (
+            cleanClassUpper.includes("RA") || 
+            /^A[1-4]$/.test(cleanClassUpper) || 
+            /^B[1-4]$/.test(cleanClassUpper) ||
+            cleanClassUpper.startsWith("RA-") ||
+            cleanClassUpper === "A" ||
+            cleanClassUpper === "B"
+          ) {
+            unitName = "RA";
+          } else if (cleanClassUpper.includes("TPA")) {
+            unitName = "TPA";
+          }
+        }
 
         return {
           nis,
