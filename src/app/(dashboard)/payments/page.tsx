@@ -252,6 +252,286 @@ export default function PaymentsPage() {
     }).format(value);
   };
 
+  const handlePrintReceipt = () => {
+    if (!foundStudent || !receiptData) return;
+    const mockInvoice: DBInvoice = {
+      id: receiptData.id,
+      studentId: foundStudent.id,
+      invoiceType: receiptData.invoiceType,
+      month: receiptData.month,
+      year: receiptData.year,
+      baseAmount: receiptData.amount,
+      discountApplied: 0,
+      amount: receiptData.amount,
+      status: "PAID",
+      transactions: [{
+        id: Date.now(),
+        amount: receiptData.amount,
+        date: new Date().toISOString(),
+        paymentMethod: "CASH"
+      }]
+    };
+    handlePrintReceiptForInvoice(mockInvoice);
+  };
+
+  const handlePrintReceiptForInvoice = (inv: DBInvoice) => {
+    if (!foundStudent) return;
+
+    const tx = inv.transactions && inv.transactions.length > 0 ? inv.transactions[0] : null;
+    const dateStr = tx ? new Date(tx.date).toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    }) + " WIB" : new Date().toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric"
+    });
+
+    const amountText = formatRupiah(inv.amount);
+
+    const terbilangFunc = (num: number): string => {
+      const ones = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
+      if (num < 12) return ones[num];
+      if (num < 20) return terbilangFunc(num - 10) + " Belas";
+      if (num < 100) return ones[Math.floor(num / 10)] + " Puluh " + terbilangFunc(num % 10);
+      if (num < 200) return "Seratus " + terbilangFunc(num - 100);
+      if (num < 1000) return ones[Math.floor(num / 100)] + " Ratus " + terbilangFunc(num % 100);
+      if (num < 2000) return "Seribu " + terbilangFunc(num - 1000);
+      if (num < 1000000) return terbilangFunc(Math.floor(num / 1000)) + " Ribu " + terbilangFunc(num % 1000);
+      if (num < 1000000000) return terbilangFunc(Math.floor(num / 1000000)) + " Juta " + terbilangFunc(num % 1000000);
+      return "";
+    };
+
+    const terbilangStr = terbilangFunc(inv.amount) ? terbilangFunc(inv.amount) + " Rupiah" : "Nol Rupiah";
+    const rawMethod = tx ? tx.paymentMethod : "CASH";
+    const displayMethod = rawMethod.toUpperCase() === "MIDTRANS" ? "QRIS" : rawMethod;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Kwitansi Pembayaran SIKUAT - ${foundStudent.name}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Inter:wght@400;600;850&display=swap');
+            body {
+              font-family: 'Inter', sans-serif;
+              color: #1e293b;
+              margin: 0;
+              padding: 40px;
+              background: #fff;
+            }
+            .receipt-border {
+              border: 2px solid #0f172a;
+              padding: 30px;
+              max-width: 750px;
+              margin: 0 auto;
+              position: relative;
+              border-radius: 12px;
+              box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+              background-color: #fff;
+              background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='150' height='150' viewBox='0 0 150 150'><text fill='%23e2e8f0' font-size='13' font-family='sans-serif' font-weight='900' x='75' y='75' transform='rotate(-30 75 75)' text-anchor='middle'>SIKUAT</text></svg>");
+              background-repeat: repeat;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 2px solid #e2e8f0;
+              padding-bottom: 20px;
+              margin-bottom: 25px;
+            }
+            .school-title {
+              font-size: 18px;
+              font-weight: 850;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              color: #0f172a;
+            }
+            .school-sub {
+              font-size: 11px;
+              color: #64748b;
+              margin-top: 4px;
+            }
+            .receipt-title {
+              font-size: 20px;
+              font-weight: 850;
+              text-align: center;
+              letter-spacing: 1px;
+              margin-bottom: 30px;
+              text-transform: uppercase;
+              color: #1e3a8a;
+            }
+            .row-data {
+              display: flex;
+              margin-bottom: 18px;
+              font-size: 13px;
+              line-height: 1.6;
+            }
+            .label {
+              width: 180px;
+              font-weight: 600;
+              color: #475569;
+            }
+            .value {
+              flex: 1;
+              border-bottom: 1px dashed #cbd5e1;
+              padding-bottom: 2px;
+              color: #0f172a;
+            }
+            .terbilang-box {
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              padding: 12px 15px;
+              border-radius: 8px;
+              font-style: italic;
+              font-weight: 600;
+              color: #0f172a;
+              margin: 25px 0;
+              font-size: 12px;
+            }
+            .footer-receipt {
+              display: flex;
+              justify-content: space-between;
+              margin-top: 50px;
+            }
+            .signature {
+              text-align: center;
+              width: 220px;
+            }
+            .signature-space {
+              height: 60px;
+            }
+            .signature-name {
+              font-weight: 700;
+              border-top: 1px solid #94a3b8;
+              padding-top: 6px;
+              font-size: 12px;
+              color: #0f172a;
+            }
+            .badge-method {
+              display: inline-block;
+              background: #e0f2fe;
+              color: #0369a1;
+              border: 1px solid #bae6fd;
+              padding: 3px 8px;
+              font-weight: 700;
+              font-size: 10px;
+              border-radius: 4px;
+              text-transform: uppercase;
+            }
+            .stamp {
+              position: absolute;
+              bottom: 150px;
+              left: 55%;
+              transform: translateX(-50%) rotate(-7deg);
+              border: 3px solid #10b981;
+              color: #10b981;
+              font-size: 13px;
+              font-weight: 900;
+              padding: 8px 16px;
+              text-transform: uppercase;
+              border-radius: 8px;
+              letter-spacing: 2px;
+              opacity: 0.8;
+            }
+            @media print {
+              body {
+                padding: 0;
+              }
+              .no-print {
+                display: none;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="receipt-border">
+            <div class="stamp">LUNAS / PAID</div>
+            <div class="header">
+              <div>
+                <div class="school-title">Yayasan Al Uswah Terpadu</div>
+                <div class="school-sub">Sistem Informasi Keuangan Terpadu (SIKUAT)</div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 11px; font-weight: 700; color: #0f172a;">No. Kwitansi: KW-${inv.id || 'NEW'}-${foundStudent.studentNumber}</div>
+                <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Tanggal: ${dateStr.split(" pukul ")[0]}</div>
+              </div>
+            </div>
+            
+            <div class="receipt-title">Kwitansi Pembayaran SPP</div>
+
+            <div class="row-data">
+              <div class="label">Telah Diterima Dari</div>
+              <div class="value" style="font-weight: 700;">${foundStudent.parent.name} (Wali ${foundStudent.name})</div>
+            </div>
+
+            <div class="row-data">
+              <div class="label">Nama Siswa / NIS</div>
+              <div class="value" style="font-weight: 600;">${foundStudent.name} (NIS: ${foundStudent.studentNumber})</div>
+            </div>
+
+            <div class="row-data">
+              <div class="label">Kelas / Unit</div>
+              <div class="value">Kelas ${foundStudent.className} / Unit ${SCHOOL_UNITS.find(u => u.id === foundStudent.schoolUnitId)?.name || 'SD'}</div>
+            </div>
+
+            <div class="row-data">
+              <div class="label">Untuk Pembayaran</div>
+              <div class="value" style="font-weight: 600;">
+                ${inv.invoiceType === "SPP" ? `SPP Bulanan - Bulan ${MONTHS.find(m => m.value === inv.month)?.name} ${inv.year}` : `Uang Pengembangan - Tahun ${inv.year}`}
+              </div>
+            </div>
+
+            <div class="row-data">
+              <div class="label">Metode Pembayaran</div>
+              <div class="value">
+                <span class="badge-method">${displayMethod}</span>
+                ${tx && tx.amount ? `<span style="margin-left: 10px; font-size: 11px; color: #64748b;">(Pembayaran loket)</span>` : ""}
+              </div>
+            </div>
+
+            <div class="row-data">
+              <div class="label">Jumlah Uang</div>
+              <div class="value" style="font-size: 15px; font-weight: 800; color: #1e3a8a;">${amountText}</div>
+            </div>
+
+            <div class="terbilang-box">
+              Terbilang: ${terbilangStr}
+            </div>
+
+            <div class="footer-receipt">
+              <div class="signature">
+                <div style="font-size: 11px; color: #64748b; margin-bottom: 40px;">Wali Murid / Pembayar</div>
+                <div class="signature-space"></div>
+                <div class="signature-name">${foundStudent.parent.name}</div>
+              </div>
+              
+              <div class="signature">
+                <div style="font-size: 11px; color: #64748b; margin-bottom: 40px;">Petugas Administrasi</div>
+                <div class="signature-space"></div>
+                <div class="signature-name">${user?.name || "Admin Kasir"}</div>
+              </div>
+            </div>
+          </div>
+          
+          <script>
+            window.onload = function() {
+              window.print();
+            }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   // Calculate Net estimation
   const getEstimatedAmount = () => {
     if (!matchingTariff) return 0;
@@ -818,6 +1098,13 @@ export default function PaymentsPage() {
                             ) : (
                               <>
                                 <button
+                                  onClick={() => handlePrintReceiptForInvoice(inv)}
+                                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer flex items-center gap-1 inline-flex"
+                                  title="Cetak kwitansi pembayaran"
+                                >
+                                  <Printer className="w-3 h-3" /> Kwitansi
+                                </button>
+                                <button
                                   onClick={async () => {
                                     if (confirm(`Apakah Anda yakin ingin membatalkan pelunasan tagihan ini (Set Belum Lunas)? Semua riwayat transaksi kasir untuk tagihan ini akan terhapus.`)) {
                                       try {
@@ -1007,7 +1294,7 @@ export default function PaymentsPage() {
             {/* Modal Bottom Buttons */}
             <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center gap-3 no-print">
               <button
-                onClick={() => window.print()}
+                onClick={handlePrintReceipt}
                 className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer text-xs"
               >
                 <Printer className="w-4 h-4" /> Cetak Kwitansi Nota

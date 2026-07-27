@@ -40,6 +40,36 @@ export default function DashboardLayout() {
     }
   };
 
+  // Auto logout on inactivity (10 minutes)
+  React.useEffect(() => {
+    let timeoutId: any;
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      // 10 minutes of inactivity
+      timeoutId = setTimeout(() => {
+        alert("Sesi Anda telah berakhir karena tidak ada aktivitas. Silakan masuk kembali.");
+        handleLogout();
+      }, 10 * 60 * 1000);
+    };
+
+    // Events to track user activity
+    const events = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"];
+    events.forEach((event) => {
+      window.addEventListener(event, resetTimer);
+    });
+
+    // Start timer on mount
+    resetTimer();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach((event) => {
+        window.removeEventListener(event, resetTimer);
+      });
+    };
+  }, []);
+
   // Define navigation items with access roles
   const menuItems = [
     {
