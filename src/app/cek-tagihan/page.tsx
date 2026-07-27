@@ -362,6 +362,23 @@ export default function CekTagihanPage() {
     window.open(getWhatsAppLink(), "_blank");
   };
 
+  const downloadQris = async (qrUrl: string) => {
+    try {
+      const response = await fetch(qrUrl);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `QRIS_${student?.studentNumber || studentNumber}_${selectedInvoice?.month}_${selectedInvoice?.year}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      window.open(qrUrl, "_blank");
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -782,7 +799,13 @@ export default function CekTagihanPage() {
                               className="w-36 h-36"
                             />
                           </div>
-                          <p className="text-[10px] text-slate-500">
+                          <button
+                            onClick={() => downloadQris(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pakasirData.payment.payment_number)}`)}
+                            className="mt-1 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] transition-colors cursor-pointer"
+                          >
+                            Unduh QRIS (JPG)
+                          </button>
+                          <p className="text-[10px] text-slate-500 font-medium pt-1">
                             Pindai kode QRIS di atas menggunakan aplikasi e-wallet pilihan Anda.
                           </p>
                           {pakasirData.payment.expired_at && (

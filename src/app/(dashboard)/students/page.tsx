@@ -57,6 +57,7 @@ export default function StudentsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterUnitId, setFilterUnitId] = useState<string>("all");
   const [filterClass, setFilterClass] = useState("");
+  const [filterDiscount, setFilterDiscount] = useState<string>("all");
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
 
   // Modal State
@@ -115,6 +116,10 @@ export default function StudentsPage() {
         }
       }
 
+      if (filterDiscount !== "all") {
+        params.discount = filterDiscount;
+      }
+
       const response = await api.get("/students", { params });
       setStudents(response.data.data);
     } catch (err: any) {
@@ -144,7 +149,7 @@ export default function StudentsPage() {
   // Fetch on filters change
   useEffect(() => {
     fetchStudents();
-  }, [filterUnitId, filterClass]);
+  }, [filterUnitId, filterClass, filterDiscount]);
 
   // Handle Search submit
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -741,6 +746,21 @@ export default function StudentsPage() {
               </select>
             </div>
           )}
+
+          {/* Discount filter */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-slate-500" />
+            <span className="text-[11px] font-medium text-slate-400">Filter Diskon:</span>
+            <select
+              value={filterDiscount}
+              onChange={(e) => setFilterDiscount(e.target.value)}
+              className="bg-slate-950 border border-slate-800 text-slate-350 px-3 py-1.5 rounded-lg text-[11px] focus:outline-none focus:border-indigo-500 transition-colors"
+            >
+              <option value="all">Semua Siswa</option>
+              <option value="yes">Memiliki Diskon</option>
+              <option value="no">Tanpa Diskon</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -762,7 +782,7 @@ export default function StudentsPage() {
                   <th className="px-6 py-4">NIS (Student Number)</th>
                   <th className="px-6 py-4">Nama Siswa</th>
                   <th className="px-6 py-4">Unit / Kelas / Lahir</th>
-                  <th className="px-6 py-4">Diskon SPP (%)</th>
+                  <th className="px-6 py-4">Nominal Diskon SPP</th>
                   <th className="px-6 py-4">Wali Murid (Parent)</th>
                   <th className="px-6 py-4 text-right">Aksi</th>
                 </tr>
