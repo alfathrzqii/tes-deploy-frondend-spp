@@ -423,15 +423,26 @@ export default function StudentsPage() {
           }
         }
 
+        // Clean and parse SPP amount
+        let cleanSppStr = rawSpp ? rawSpp.toString().trim() : "";
+        if (cleanSppStr.endsWith(",00") || cleanSppStr.endsWith(".00")) {
+          cleanSppStr = cleanSppStr.slice(0, -3);
+        }
+        const sppAmount = Number(cleanSppStr.replace(/[\.,]/g, "")) || 185000;
+
         // Parse discount amount
         let discountAmount = 0;
         if (rawDiscount) {
           const valStr = rawDiscount.toString().trim().toLowerCase();
-          const sppAmount = Number(rawSpp) || 185000;
           if (valStr.includes("beradik") || valStr.includes("kakak")) {
             discountAmount = Math.round(sppAmount * 0.1);
           } else {
-            const numVal = parseFloat(valStr);
+            let cleanDiscountStr = valStr;
+            if (cleanDiscountStr.endsWith(",00") || cleanDiscountStr.endsWith(".00")) {
+              cleanDiscountStr = cleanDiscountStr.slice(0, -3);
+            }
+            // Remove dots and commas to handle thousand separators
+            const numVal = parseFloat(cleanDiscountStr.replace(/[\.,]/g, ""));
             if (!isNaN(numVal)) {
               if (numVal <= 100) {
                 discountAmount = Math.round(sppAmount * (numVal / 100));
