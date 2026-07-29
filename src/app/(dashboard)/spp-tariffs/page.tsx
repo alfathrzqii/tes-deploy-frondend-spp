@@ -18,6 +18,11 @@ interface SppTariff {
   schoolUnitId: number;
   enrollmentYear: number;
   amount: number;
+  developmentFee?: number;
+  reRegistrationFee?: number;
+  equipmentFee?: number;
+  extracurricularFee?: number;
+  uniformFee?: number;
 }
 
 const SCHOOL_UNITS = [
@@ -43,6 +48,11 @@ export default function SppTariffsPage() {
   const [formUnitId, setFormUnitId] = useState<number>(1);
   const [formYear, setFormYear] = useState<number>(new Date().getFullYear());
   const [formAmount, setFormAmount] = useState<string>("");
+  const [formDevelopmentFee, setFormDevelopmentFee] = useState<string>("");
+  const [formReRegistrationFee, setFormReRegistrationFee] = useState<string>("");
+  const [formEquipmentFee, setFormEquipmentFee] = useState<string>("");
+  const [formExtracurricularFee, setFormExtracurricularFee] = useState<string>("");
+  const [formUniformFee, setFormUniformFee] = useState<string>("");
 
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
   const isUnitAdmin = user?.role === "UNIT_ADMIN";
@@ -72,6 +82,11 @@ export default function SppTariffsPage() {
     setFormUnitId(1);
     setFormYear(new Date().getFullYear());
     setFormAmount("");
+    setFormDevelopmentFee("");
+    setFormReRegistrationFee("");
+    setFormEquipmentFee("");
+    setFormExtracurricularFee("");
+    setFormUniformFee("");
     setIsModalOpen(true);
   };
 
@@ -82,6 +97,11 @@ export default function SppTariffsPage() {
     setFormUnitId(tariff.schoolUnitId);
     setFormYear(tariff.enrollmentYear);
     setFormAmount(String(tariff.amount));
+    setFormDevelopmentFee(String(tariff.developmentFee || 0));
+    setFormReRegistrationFee(String(tariff.reRegistrationFee || 0));
+    setFormEquipmentFee(String(tariff.equipmentFee || 0));
+    setFormExtracurricularFee(String(tariff.extracurricularFee || 0));
+    setFormUniformFee(String(tariff.uniformFee || 0));
     setIsModalOpen(true);
   };
 
@@ -97,11 +117,22 @@ export default function SppTariffsPage() {
       return;
     }
 
+    const devFeeNum = Number(formDevelopmentFee || 0);
+    const reRegFeeNum = Number(formReRegistrationFee || 0);
+    const equipFeeNum = Number(formEquipmentFee || 0);
+    const extraFeeNum = Number(formExtracurricularFee || 0);
+    const uniformFeeNum = Number(formUniformFee || 0);
+
     try {
       const payload = {
         schoolUnitId: formUnitId,
         enrollmentYear: formYear,
         amount: amountNum,
+        developmentFee: devFeeNum,
+        reRegistrationFee: reRegFeeNum,
+        equipmentFee: equipFeeNum,
+        extracurricularFee: extraFeeNum,
+        uniformFee: uniformFeeNum,
       };
 
       if (modalMode === "create") {
@@ -204,6 +235,11 @@ export default function SppTariffsPage() {
                   <th className="px-6 py-4">Unit Sekolah</th>
                   <th className="px-6 py-4">Tahun Angkatan</th>
                   <th className="px-6 py-4">Tarif Bulanan</th>
+                  <th className="px-6 py-4">Uang Pengembangan</th>
+                  <th className="px-6 py-4">Uang Daftar Ulang</th>
+                  <th className="px-6 py-4">Uang Peralatan</th>
+                  <th className="px-6 py-4">Biaya Ekskul</th>
+                  <th className="px-6 py-4">Biaya Seragam</th>
                   {isSuperAdmin && <th className="px-6 py-4 text-right">Aksi</th>}
                 </tr>
               </thead>
@@ -223,6 +259,21 @@ export default function SppTariffsPage() {
                     </td>
                     <td className="px-6 py-4 font-bold text-white">
                       {formatRupiah(tariff.amount)}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-slate-350">
+                      {formatRupiah(tariff.developmentFee || 0)}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-slate-350">
+                      {formatRupiah(tariff.reRegistrationFee || 0)}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-slate-350">
+                      {formatRupiah(tariff.equipmentFee || 0)}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-slate-355">
+                      {formatRupiah(tariff.extracurricularFee || 0)}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-slate-355">
+                      {formatRupiah(tariff.uniformFee || 0)}
                     </td>
                     {isSuperAdmin && (
                       <td className="px-6 py-4 text-right">
@@ -313,10 +364,70 @@ export default function SppTariffsPage() {
               <div className="space-y-1.5">
                 <label className="font-semibold text-slate-300">Tarif Bulanan (IDR)</label>
                 <input
+                   type="number"
+                   placeholder="Contoh: 150000"
+                   value={formAmount}
+                   onChange={(e) => setFormAmount(e.target.value)}
+                   className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {/* Development Fee */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-300">Uang Pengembangan (IDR)</label>
+                <input
                   type="number"
-                  placeholder="Contoh: 150000"
-                  value={formAmount}
-                  onChange={(e) => setFormAmount(e.target.value)}
+                  placeholder="Contoh: 1000000"
+                  value={formDevelopmentFee}
+                  onChange={(e) => setFormDevelopmentFee(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {/* Re-registration Fee */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-300">Uang Daftar Ulang (IDR)</label>
+                <input
+                  type="number"
+                  placeholder="Contoh: 250000"
+                  value={formReRegistrationFee}
+                  onChange={(e) => setFormReRegistrationFee(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {/* Equipment Fee */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-300">Uang Peralatan (IDR)</label>
+                <input
+                  type="number"
+                  placeholder="Contoh: 500000"
+                  value={formEquipmentFee}
+                  onChange={(e) => setFormEquipmentFee(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {/* Extracurricular Fee */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-300">Biaya Ekstrakurikuler (IDR)</label>
+                <input
+                  type="number"
+                  placeholder="Contoh: 250000"
+                  value={formExtracurricularFee}
+                  onChange={(e) => setFormExtracurricularFee(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {/* Uniform Fee */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-300">Biaya Seragam (IDR)</label>
+                <input
+                  type="number"
+                  placeholder="Contoh: 600000"
+                  value={formUniformFee}
+                  onChange={(e) => setFormUniformFee(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg placeholder:text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>

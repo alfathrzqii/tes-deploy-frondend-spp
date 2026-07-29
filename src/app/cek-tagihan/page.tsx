@@ -28,6 +28,7 @@ interface StudentInfo {
   id: number;
   studentNumber: string;
   name: string;
+  className: string;
   enrollmentYear: number;
   discountAmount: number;
   schoolUnit: {
@@ -79,6 +80,8 @@ export default function CekTagihanPage() {
   // Midtrans Snap Modal State (Pakasir Integration)
   const [snapOpen, setSnapOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [selectedInvoicesList, setSelectedInvoicesList] = useState<Invoice[]>([]);
+  const [checkedKeys, setCheckedKeys] = useState<string[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<"qris" | "bni_va" | "bri_va" | "cimb_niaga_va" | "tf_manual">("qris");
   const [vaNumber] = useState(() => `89022${Math.floor(1000000000 + Math.random() * 9000000000)}`);
   const [copied, setCopied] = useState(false);
@@ -110,6 +113,7 @@ export default function CekTagihanPage() {
     setError("");
     setStudent(null);
     setInvoices([]);
+    setCheckedKeys([]);
 
     try {
       // 1. Fetch invoices
@@ -129,6 +133,7 @@ export default function CekTagihanPage() {
             id: response.data.data[0].studentId,
             studentNumber: studentNumber.trim(),
             name: "Siswa Terdaftar",
+            className: "",
             enrollmentYear: response.data.data[0].year,
             discountAmount: 0,
             schoolUnit: { name: "Unit Sekolah" },
@@ -155,7 +160,7 @@ export default function CekTagihanPage() {
     }
   };
 
-  const fetchPakasirTransaction = async (method: string, invoice: Invoice) => {
+  const fetchPakasirTransaction = async (method: string, targetInvoices: Invoice[]) => {
     if (method === "tf_manual") {
       setPakasirData(null);
       return;
@@ -164,9 +169,12 @@ export default function CekTagihanPage() {
     try {
       const response = await api.post("/invoices/pakasir/create", {
         studentNumber: student?.studentNumber || studentNumber,
-        month: invoice.month,
-        year: invoice.year,
         paymentMethod: method,
+        invoices: targetInvoices.map((inv) => ({
+          month: inv.month,
+          year: inv.year,
+          invoiceType: inv.invoiceType,
+        })),
       });
 
       if (response.data.success) {
@@ -185,21 +193,53 @@ export default function CekTagihanPage() {
     }
   };
 
+  const toggleInvoiceCheck = (inv: Invoice) => {
+    const key = `${inv.invoiceType}-${inv.month}-${inv.year}`;
+    setCheckedKeys((prev) =>
+      prev.includes(key)
+        ? prev.filter((k) => k !== key)
+        : [...prev, key]
+    );
+  };
+
+  const isInvoiceChecked = (inv: Invoice) => {
+    const key = `${inv.invoiceType}-${inv.month}-${inv.year}`;
+    return checkedKeys.includes(key);
+  };
+
   const handleOpenSnap = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
+    setSelectedInvoicesList([invoice]);
     setSnapOpen(true);
     setPaymentSuccess(false);
     setProcessingPayment(false);
     setPakasirData(null);
     setRealVaNumber("");
     setPaymentMethod("qris");
-    fetchPakasirTransaction("qris", invoice);
+    fetchPakasirTransaction("qris", [invoice]);
+  };
+
+  const handleOpenSnapBatch = () => {
+    const selected = invoices.filter((inv) => {
+      const key = `${inv.invoiceType}-${inv.month}-${inv.year}`;
+      return checkedKeys.includes(key) && inv.status === "PENDING";
+    });
+    if (selected.length === 0) return;
+    setSelectedInvoice(selected[0]);
+    setSelectedInvoicesList(selected);
+    setSnapOpen(true);
+    setPaymentSuccess(false);
+    setProcessingPayment(false);
+    setPakasirData(null);
+    setRealVaNumber("");
+    setPaymentMethod("qris");
+    fetchPakasirTransaction("qris", selected);
   };
 
   const handlePaymentMethodChange = (newMethod: "qris" | "bni_va" | "bri_va" | "cimb_niaga_va" | "tf_manual") => {
     setPaymentMethod(newMethod);
-    if (selectedInvoice) {
-      fetchPakasirTransaction(newMethod, selectedInvoice);
+    if (selectedInvoicesList.length > 0) {
+      fetchPakasirTransaction(newMethod, selectedInvoicesList);
     }
   };
 
@@ -212,19 +252,24 @@ export default function CekTagihanPage() {
       );
       if (response.data.success && response.data.status === "completed") {
         setPaymentSuccess(true);
-        if (selectedInvoice) {
-          const updatedInvoices = invoices.map((inv) => {
-            if (inv.month === selectedInvoice.month && inv.year === selectedInvoice.year) {
-              return {
-                ...inv,
-                status: "PAID" as const,
-                midtransOrderId: pakasirData.orderId,
-              };
-            }
-            return inv;
-          });
-          setInvoices(updatedInvoices);
-        }
+        const updatedInvoices = invoices.map((inv) => {
+          const isPart = selectedInvoicesList.some(
+            (sel) =>
+              sel.invoiceType === inv.invoiceType &&
+              sel.month === inv.month &&
+              sel.year === inv.year
+          );
+          if (isPart) {
+            return {
+              ...inv,
+              status: "PAID" as const,
+              midtransOrderId: pakasirData.orderId,
+            };
+          }
+          return inv;
+        });
+        setInvoices(updatedInvoices);
+        setCheckedKeys([]);
       } else {
         alert("Pembayaran belum terdeteksi. Silakan lakukan pembayaran terlebih dahulu.");
       }
@@ -270,19 +315,24 @@ export default function CekTagihanPage() {
           );
           if (response.data.success && response.data.status === "completed") {
             setPaymentSuccess(true);
-            if (selectedInvoice) {
-              const updatedInvoices = invoices.map((inv) => {
-                if (inv.month === selectedInvoice.month && inv.year === selectedInvoice.year) {
-                  return {
-                    ...inv,
-                    status: "PAID" as const,
-                    midtransOrderId: pakasirData.orderId,
-                  };
-                }
-                return inv;
-              });
-              setInvoices(updatedInvoices);
-            }
+            const updatedInvoices = invoices.map((inv) => {
+              const isPart = selectedInvoicesList.some(
+                (sel) =>
+                  sel.invoiceType === inv.invoiceType &&
+                  sel.month === inv.month &&
+                  sel.year === inv.year
+              );
+              if (isPart) {
+                return {
+                  ...inv,
+                  status: "PAID" as const,
+                  midtransOrderId: pakasirData.orderId,
+                };
+              }
+              return inv;
+            });
+            setInvoices(updatedInvoices);
+            setCheckedKeys([]);
           }
         } catch (err) {
           console.error("Gagal polling status pembayaran:", err);
@@ -299,17 +349,20 @@ export default function CekTagihanPage() {
         clearInterval(intervalId);
       }
     };
-  }, [snapOpen, pakasirData, paymentSuccess, paymentMethod, invoices, selectedInvoice]);
+  }, [snapOpen, pakasirData, paymentSuccess, paymentMethod, invoices, selectedInvoicesList]);
 
   const handleSimulatePayment = async () => {
-    if (!selectedInvoice) return;
+    if (selectedInvoicesList.length === 0) return;
 
     setProcessingPayment(true);
     try {
       const payload = {
         studentNumber: student?.studentNumber || studentNumber,
-        month: selectedInvoice.month,
-        year: selectedInvoice.year,
+        invoices: selectedInvoicesList.map((inv) => ({
+          month: inv.month,
+          year: inv.year,
+          invoiceType: inv.invoiceType,
+        })),
       };
 
       const response = await api.post("/invoices/pay-online-simulated", payload);
@@ -318,7 +371,13 @@ export default function CekTagihanPage() {
         setPaymentSuccess(true);
         // Refresh invoice list
         const updatedInvoices = invoices.map((inv) => {
-          if (inv.month === selectedInvoice.month && inv.year === selectedInvoice.year) {
+          const isPart = selectedInvoicesList.some(
+            (sel) =>
+              sel.invoiceType === inv.invoiceType &&
+              sel.month === inv.month &&
+              sel.year === inv.year
+          );
+          if (isPart) {
             return {
               ...inv,
               status: "PAID" as const,
@@ -328,6 +387,7 @@ export default function CekTagihanPage() {
           return inv;
         });
         setInvoices(updatedInvoices);
+        setCheckedKeys([]);
       } else {
         alert(response.data.message || "Gagal memproses pembayaran");
       }
@@ -340,19 +400,35 @@ export default function CekTagihanPage() {
   };
 
   const getWhatsAppLink = () => {
-    if (!selectedInvoice) return "#";
+    if (selectedInvoicesList.length === 0) return "#";
     const studentName = student?.name || "Siswa";
     const nis = student?.studentNumber || studentNumber;
-    const monthName = INDONESIAN_MONTHS[selectedInvoice.month];
-    const year = selectedInvoice.year;
-    const amountStr = formatRupiah(selectedInvoice.amount);
 
-    const message = `Halo Admin, saya ingin mengonfirmasi pembayaran SPP secara manual.\n\n` +
-      `*Rincian Tagihan:*\n` +
+    let itemsDetailsText = "";
+    selectedInvoicesList.forEach((inv) => {
+      let typeStr = inv.invoiceType;
+      if (inv.invoiceType === "UANG_PENGEMBANGAN") typeStr = "Uang Pengembangan";
+      else if (inv.invoiceType === "DAFTAR_ULANG") typeStr = "Daftar Ulang";
+      else if (inv.invoiceType === "UANG_PERALATAN") typeStr = "Uang Peralatan";
+      else if (inv.invoiceType === "EKSTRAKURIKULER") typeStr = "Ekstrakurikuler";
+      else if (inv.invoiceType === "SERAGAM") typeStr = "Seragam";
+
+      const period = inv.invoiceType === "SPP" 
+        ? `${INDONESIAN_MONTHS[inv.month]} ${inv.year}`
+        : "Pendaftaran Siswa Baru";
+
+      itemsDetailsText += `- *Jenis:* ${typeStr} (${period}) -> *Nominal:* ${formatRupiah(inv.amount)}\n`;
+    });
+
+    const totalStr = formatRupiah(selectedInvoicesList.reduce((sum, inv) => sum + inv.amount, 0));
+
+    const message = `Halo Admin, saya ingin mengonfirmasi pembayaran tagihan secara manual.\n\n` +
+      `*Data Siswa:*\n` +
       `- *Nama Siswa:* ${studentName}\n` +
-      `- *NIS:* ${nis}\n` +
-      `- *Bulan:* ${monthName} ${year}\n` +
-      `- *Nominal:* ${amountStr}\n\n` +
+      `- *NIS:* ${nis}\n\n` +
+      `*Rincian Pembayaran:*\n` +
+      itemsDetailsText +
+      `\n*Total Nominal:* *${totalStr}*\n\n` +
       `Berikut saya lampirkan bukti transfer. Terima kasih.`;
 
     return `https://wa.me/6289678331076?text=${encodeURIComponent(message)}`;
@@ -546,7 +622,9 @@ export default function CekTagihanPage() {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h4 className="font-bold text-sm text-slate-300 tracking-wide uppercase">
-                  Daftar Tagihan SPP Bulanan - Tahun {selectedYear}
+                  {student.className.toUpperCase() === "PPDB"
+                    ? "Daftar Tagihan Penerimaan Siswa Baru (PPDB)"
+                    : `Daftar Tagihan SPP Bulanan - Tahun ${selectedYear}`}
                 </h4>
                 <span className="text-xs text-slate-400">
                   Total {invoices.length} tagihan ditemukan
@@ -556,30 +634,65 @@ export default function CekTagihanPage() {
               <div className="grid gap-3.5">
                 {invoices.map((invoice) => {
                   const isPaid = invoice.status === "PAID";
+                  const key = `${invoice.invoiceType}-${invoice.month}-${invoice.year}`;
                   return (
                     <div
-                      key={invoice.month}
+                      key={key}
                       className={`bg-slate-900/40 border rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:bg-slate-900/60 ${
                         isPaid ? "border-emerald-500/20" : "border-slate-800/80"
                       }`}
                     >
                       {/* Left: Invoice Month & Year */}
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 flex-1">
+                        {!isPaid && (
+                          <input
+                            type="checkbox"
+                            checked={isInvoiceChecked(invoice)}
+                            onChange={() => toggleInvoiceCheck(invoice)}
+                            className="w-4.5 h-4.5 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
+                          />
+                        )}
                         <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs uppercase shrink-0 ${
                             isPaid
                               ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                               : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                           }`}
                         >
-                          {invoice.month}
+                          {invoice.invoiceType === "SPP"
+                            ? invoice.month
+                            : invoice.invoiceType === "UANG_PENGEMBANGAN"
+                            ? "UP"
+                            : invoice.invoiceType === "DAFTAR_ULANG"
+                            ? "DU"
+                            : invoice.invoiceType === "UANG_PERALATAN"
+                            ? "PR"
+                            : invoice.invoiceType === "EKSTRAKURIKULER"
+                            ? "EK"
+                            : invoice.invoiceType === "SERAGAM"
+                            ? "SG"
+                            : "LN"}
                         </div>
                         <div>
                           <h5 className="font-bold text-sm text-white">
-                            SPP Bulan {INDONESIAN_MONTHS[invoice.month]}
+                            {invoice.invoiceType === "SPP"
+                              ? `SPP Bulan ${INDONESIAN_MONTHS[invoice.month]}`
+                              : invoice.invoiceType === "UANG_PENGEMBANGAN"
+                              ? "Uang Pengembangan"
+                              : invoice.invoiceType === "DAFTAR_ULANG"
+                              ? "Daftar Ulang"
+                              : invoice.invoiceType === "UANG_PERALATAN"
+                              ? "Uang Peralatan"
+                              : invoice.invoiceType === "EKSTRAKURIKULER"
+                              ? "Biaya Ekstrakurikuler"
+                              : invoice.invoiceType === "SERAGAM"
+                              ? "Biaya Seragam"
+                              : "Tagihan Lainnya"}
                           </h5>
                           <span className="text-xs text-slate-400">
-                            Tahun {invoice.year}
+                            {invoice.invoiceType === "SPP"
+                              ? `Tahun ${invoice.year}`
+                              : "Pendaftaran Siswa Baru"}
                           </span>
                         </div>
                       </div>
@@ -620,6 +733,35 @@ export default function CekTagihanPage() {
                   );
                 })}
               </div>
+
+              {/* Batch Action Bar */}
+              {checkedKeys.length > 0 && (
+                <div className="mt-6 bg-indigo-950/40 border border-indigo-500/30 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-slideIn">
+                  <div className="text-center sm:text-left">
+                    <p className="text-xs text-indigo-300 font-semibold uppercase tracking-wider">
+                      Terpilih {checkedKeys.length} Tagihan
+                    </p>
+                    <h4 className="text-xl font-extrabold text-white mt-1">
+                      Total: {formatRupiah(invoices.filter(isInvoiceChecked).reduce((sum, inv) => sum + inv.amount, 0))}
+                    </h4>
+                  </div>
+                  <div className="flex gap-3 w-full sm:w-auto">
+                    <button
+                      onClick={() => setCheckedKeys([])}
+                      className="flex-1 sm:flex-initial px-4 py-2 border border-slate-700 hover:border-slate-600 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      onClick={handleOpenSnapBatch}
+                      className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/10 cursor-pointer"
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      <span>Bayar Online Terpilih</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>
@@ -660,29 +802,50 @@ export default function CekTagihanPage() {
                 </div>
                 <h4 className="font-extrabold text-xl text-slate-900">Pembayaran Sukses!</h4>
                 <p className="text-xs text-slate-500 mt-2 max-w-xs">
-                  Tagihan SPP bulan {INDONESIAN_MONTHS[selectedInvoice.month]} {selectedInvoice.year} telah berhasil dibayar.
+                  Pembayaran untuk {selectedInvoicesList.length} tagihan telah berhasil diproses secara lunas.
                 </p>
 
-                <div className="w-full bg-slate-50 rounded-xl p-4 my-6 text-left border border-slate-100 space-y-2 text-xs">
+                <div className="w-full bg-slate-50 rounded-xl p-4 my-4 text-left border border-slate-100 space-y-2 text-xs max-h-[220px] overflow-y-auto">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Order ID</span>
                     <span className="font-mono font-medium text-slate-700">
-                      {selectedInvoice.midtransOrderId || "MOCK-MIDTRANS"}
+                      {pakasirData?.orderId || "BATCH-MOCK-MIDTRANS"}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Nama Siswa</span>
                     <span className="font-medium text-slate-700">{student?.name}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between border-b border-slate-200/50 pb-1.5">
                     <span className="text-slate-400">Metode</span>
                     <span className="font-bold text-indigo-600 uppercase">
                       {paymentMethod === "tf_manual" ? "Transfer Manual (BSI)" : paymentMethod.replace("_", " ")}
                     </span>
                   </div>
+                  
+                  <div className="space-y-1">
+                    <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Item Lunas:</span>
+                    {selectedInvoicesList.map((inv, idx) => {
+                      let typeStr = inv.invoiceType;
+                      if (inv.invoiceType === "SPP") typeStr = `SPP ${INDONESIAN_MONTHS[inv.month]}`;
+                      else if (inv.invoiceType === "UANG_PENGEMBANGAN") typeStr = "Uang Pengembangan";
+                      else if (inv.invoiceType === "DAFTAR_ULANG") typeStr = "Daftar Ulang";
+                      else if (inv.invoiceType === "UANG_PERALATAN") typeStr = "Uang Peralatan";
+                      else if (inv.invoiceType === "EKSTRAKURIKULER") typeStr = "Ekstrakurikuler";
+                      else if (inv.invoiceType === "SERAGAM") typeStr = "Seragam";
+
+                      return (
+                        <div key={idx} className="flex justify-between text-[11px] text-slate-600 pl-2 border-l border-indigo-400/30">
+                          <span>{typeStr}</span>
+                          <span>{formatRupiah(inv.amount)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
                   <div className="flex justify-between border-t border-slate-200/80 pt-2 font-bold text-slate-800 text-sm">
-                    <span>Jumlah</span>
-                    <span>{formatRupiah(selectedInvoice.amount)}</span>
+                    <span>Total Pembayaran</span>
+                    <span>{formatRupiah(selectedInvoicesList.reduce((sum, inv) => sum + inv.amount, 0))}</span>
                   </div>
                 </div>
 
@@ -697,16 +860,34 @@ export default function CekTagihanPage() {
               /* Checkout screens */
               <div className="flex-1 flex flex-col">
                 {/* Total Billing Info */}
-                <div className="bg-indigo-50/70 px-6 py-4 flex items-center justify-between border-b border-indigo-100">
-                  <div className="text-xs">
-                    <span className="text-slate-500">Total Tagihan</span>
-                    <h5 className="font-extrabold text-slate-850 text-base mt-0.5">
-                      {INDONESIAN_MONTHS[selectedInvoice.month]} {selectedInvoice.year}
-                    </h5>
-                  </div>
-                  <span className="font-extrabold text-indigo-700 text-lg">
-                    {pakasirData ? formatRupiah(pakasirData.payment.total_payment) : formatRupiah(selectedInvoice.amount)}
+                <div className="bg-indigo-50/70 px-6 py-4 flex flex-col border-b border-indigo-100">
+                  <span className="text-slate-500 font-semibold uppercase tracking-wider text-[9px]">
+                    Rincian Item Pembayaran ({selectedInvoicesList.length} Item)
                   </span>
+                  <div className="max-h-[100px] overflow-y-auto mt-1 space-y-1.5">
+                    {selectedInvoicesList.map((inv, idx) => {
+                      let typeStr = inv.invoiceType;
+                      if (inv.invoiceType === "SPP") typeStr = `SPP ${INDONESIAN_MONTHS[inv.month]} ${inv.year}`;
+                      else if (inv.invoiceType === "UANG_PENGEMBANGAN") typeStr = "Uang Pengembangan";
+                      else if (inv.invoiceType === "DAFTAR_ULANG") typeStr = "Daftar Ulang";
+                      else if (inv.invoiceType === "UANG_PERALATAN") typeStr = "Uang Peralatan";
+                      else if (inv.invoiceType === "EKSTRAKURIKULER") typeStr = "Ekstrakurikuler";
+                      else if (inv.invoiceType === "SERAGAM") typeStr = "Seragam";
+
+                      return (
+                        <div key={idx} className="flex justify-between text-xs text-slate-700">
+                          <span className="font-medium">{typeStr}</span>
+                          <span className="font-bold text-slate-900">{formatRupiah(inv.amount)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between items-center border-t border-indigo-200/50 pt-2 mt-2">
+                    <span className="text-[10px] uppercase font-bold text-indigo-600">Total Tagihan</span>
+                    <span className="font-extrabold text-indigo-700 text-lg">
+                      {pakasirData ? formatRupiah(pakasirData.payment.total_payment) : formatRupiah(selectedInvoicesList.reduce((sum, inv) => sum + inv.amount, 0))}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Main panel - Methods */}

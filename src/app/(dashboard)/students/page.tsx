@@ -28,6 +28,7 @@ interface Student {
   parentId: number;
   enrollmentYear: number;
   discountAmount: number;
+  status: string;
   birthDate?: string | null;
   parent: {
     name: string;
@@ -59,6 +60,7 @@ export default function StudentsPage() {
   const [filterClass, setFilterClass] = useState("");
   const [filterDiscount, setFilterDiscount] = useState<string>("all");
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<"active" | "ppdb" | "canceled">("active");
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -111,9 +113,25 @@ export default function StudentsPage() {
         } else if (filterUnitId !== "all") {
           params.schoolUnitId = Number(filterUnitId);
         }
-        if (filterClass.trim()) {
-          params.className = filterClass.trim();
+        
+        if (activeTab === "ppdb") {
+          params.className = "PPDB";
+        } else if (activeTab === "active") {
+          params.excludePpdb = "true";
+          if (filterClass.trim()) {
+            params.className = filterClass.trim();
+          }
+        } else if (activeTab === "canceled") {
+          if (filterClass.trim()) {
+            params.className = filterClass.trim();
+          }
         }
+      }
+
+      if (activeTab === "canceled") {
+        params.status = "CANCELED";
+      } else {
+        params.status = "ACTIVE";
       }
 
       if (filterDiscount !== "all") {
@@ -146,10 +164,10 @@ export default function StudentsPage() {
     fetchUniqueClasses();
   }, []);
 
-  // Fetch on filters change
+  // Fetch on filters or tab change
   useEffect(() => {
     fetchStudents();
-  }, [filterUnitId, filterClass, filterDiscount]);
+  }, [filterUnitId, filterClass, filterDiscount, activeTab]);
 
   // Handle Search submit
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -189,6 +207,26 @@ export default function StudentsPage() {
     setIsModalOpen(true);
   };
 
+  const handleUpdateStatus = async (id: number, newStatus: "ACTIVE" | "CANCELED") => {
+    const actionText = newStatus === "CANCELED"
+      ? "membatalkan pendaftaran siswa ini? Semua tagihan PENDING milik siswa ini akan otomatis dihapus."
+      : "mengaktifkan kembali siswa ini?";
+
+    if (!confirm(`Apakah Anda yakin ingin ${actionText}`)) {
+      return;
+    }
+
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const response = await api.put(`/students/${id}`, { status: newStatus });
+      setSuccessMsg(response.data.message || "Status siswa berhasil diperbarui");
+      fetchStudents();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Gagal memperbarui status siswa");
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -202,8 +240,8 @@ export default function StudentsPage() {
 
     try {
       if (modalMode === "create") {
-        if (!/^\d{4}$/.test(formNis.trim())) {
-          setError("Nomor induk siswa (NIS) harus berupa 4 digit angka (contoh: 1234)");
+        if (formNis.trim().length < 3 || formNis.trim().length > 50) {
+          setError("Nomor induk/pendaftaran siswa harus terdiri dari 3 hingga 50 karakter");
           return;
         }
 
@@ -717,6 +755,40 @@ export default function StudentsPage() {
         </div>
       )}
 
+      {/* Navigation Tabs */}
+      <div className="flex border-b border-slate-800 gap-6 text-xs font-semibold">
+        <button
+          onClick={() => setActiveTab("active")}
+          className={`pb-2.5 px-1 border-b-2 transition-all cursor-pointer ${
+            activeTab === "active"
+              ? "border-indigo-500 text-indigo-400 font-bold"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Siswa Aktif
+        </button>
+        <button
+          onClick={() => setActiveTab("ppdb")}
+          className={`pb-2.5 px-1 border-b-2 transition-all cursor-pointer ${
+            activeTab === "ppdb"
+              ? "border-indigo-500 text-indigo-400 font-bold"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Calon Siswa (PPDB)
+        </button>
+        <button
+          onClick={() => setActiveTab("canceled")}
+          className={`pb-2.5 px-1 border-b-2 transition-all cursor-pointer ${
+            activeTab === "canceled"
+              ? "border-indigo-500 text-indigo-400 font-bold"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          Siswa Batal / Gagal Bayar
+        </button>
+      </div>
+
       {/* Filters and search area */}
       <div className="bg-slate-900/40 border border-slate-800/80 p-4 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4 backdrop-blur-md">
         {/* Search Bar Form */}
@@ -867,6 +939,23 @@ export default function StudentsPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="inline-flex gap-2">
+                        {student.status === "ACTIVE" ? (
+                          <button
+                            onClick={() => handleUpdateStatus(student.id, "CANCELED")}
+                            className="p-1.5 rounded-lg border border-slate-800 hover:border-amber-500/20 text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
+                            title="Batalkan Pendaftaran"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleUpdateStatus(student.id, "ACTIVE")}
+                            className="p-1.5 rounded-lg border border-slate-800 hover:border-emerald-500/20 text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                            title="Aktifkan Kembali"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => openEditModal(student)}
                           className="p-1.5 rounded-lg border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
@@ -1068,12 +1157,12 @@ export default function StudentsPage() {
                 {modalMode === "create" ? (
                   <input
                     type="text"
-                    maxLength={4}
-                    placeholder="Contoh: 1234"
+                    maxLength={50}
+                    placeholder="Contoh: 1234 atau PPDB-2026-001"
                     value={formNis}
                     onChange={(e) => {
-                      const val = e.target.value.replace(/[^0-9]/g, "");
-                      if (val.length <= 4) {
+                      const val = e.target.value.replace(/[^a-zA-Z0-9_-]/g, "");
+                      if (val.length <= 50) {
                         setFormNis(val);
                       }
                     }}
@@ -1112,6 +1201,7 @@ export default function StudentsPage() {
                     className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
                   >
                     <option value="">-- Pilih Kelas --</option>
+                    <option value="PPDB">PPDB (Calon Siswa Baru)</option>
                     {getClassesByUnitId(formUnitId).map((c) => (
                       <option key={c} value={c}>
                         {c}
