@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { api } from "@/lib/api";
 import * as XLSX from "xlsx";
@@ -59,7 +59,7 @@ export default function StudentsPage() {
   const [filterUnitId, setFilterUnitId] = useState<string>("all");
   const [filterClass, setFilterClass] = useState("");
   const [filterDiscount, setFilterDiscount] = useState<string>("all");
-  const [availableClasses, setAvailableClasses] = useState<string[]>([]);
+  const [allDbStudents, setAllDbStudents] = useState<Student[]>([]);
   const [activeTab, setActiveTab] = useState<"active" | "ppdb" | "canceled">("active");
 
   // Modal State
@@ -93,6 +93,44 @@ export default function StudentsPage() {
 
   const isUnitAdmin = user?.role === "UNIT_ADMIN";
   const isWaliKelas = user?.role === "WALI_KELAS";
+
+  // Effective selected Unit ID (null if "all" / no unit selected)
+  const effectiveUnitId = isUnitAdmin || isWaliKelas
+    ? (user?.schoolUnitId || null)
+    : (filterUnitId !== "all" ? Number(filterUnitId) : null);
+
+  const fetchMasterStudentsForClasses = async () => {
+    try {
+      const response = await api.get("/students");
+      setAllDbStudents(response.data.data || []);
+    } catch (err) {
+      console.error("Gagal mengambil master data siswa untuk kelas", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchMasterStudentsForClasses();
+  }, []);
+
+  // Reset filterClass whenever filterUnitId changes
+  useEffect(() => {
+    setFilterClass("");
+  }, [filterUnitId]);
+
+  // Compute available classes dynamically for the selected unit
+  const currentUnitClasses = useMemo(() => {
+    if (!effectiveUnitId) return [];
+
+    const presetClasses = getClassesByUnitId(effectiveUnitId);
+    
+    // Custom/extra DB classes for students in this unit
+    const dbClassesForUnit = allDbStudents
+      .filter((s) => s.schoolUnitId === effectiveUnitId && s.className && s.className !== "PPDB")
+      .map((s) => s.className);
+
+    const combined = Array.from(new Set([...presetClasses, ...dbClassesForUnit]));
+    return combined.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [effectiveUnitId, allDbStudents]);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -146,23 +184,6 @@ export default function StudentsPage() {
       setLoading(false);
     }
   };
-
-  // Fetch unique classes once at load (or when data is modified)
-  const fetchUniqueClasses = async () => {
-    try {
-      const response = await api.get("/students");
-      const fetchedClasses = (response.data.data || []).map((s: any) => s.className).filter(Boolean);
-      const combined = Array.from(new Set([...ALL_PRESET_CLASSES, ...fetchedClasses]));
-      setAvailableClasses(combined.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
-    } catch (err) {
-      console.error("Gagal mengambil daftar kelas", err);
-      setAvailableClasses(ALL_PRESET_CLASSES);
-    }
-  };
-
-  useEffect(() => {
-    fetchUniqueClasses();
-  }, []);
 
   // Fetch on filters or tab change
   useEffect(() => {
@@ -276,7 +297,7 @@ export default function StudentsPage() {
       }
       setIsModalOpen(false);
       fetchStudents();
-      fetchUniqueClasses();
+      fetchMasterStudentsForClasses();
     } catch (err: any) {
       const serverMsg = err.response?.data?.message;
       const validationErrors = err.response?.data?.errors;
@@ -299,7 +320,7 @@ export default function StudentsPage() {
       const response = await api.delete(`/students/${id}`);
       setSuccessMsg(response.data.message || "Data siswa berhasil dihapus");
       fetchStudents();
-      fetchUniqueClasses();
+      fetchMasterStudentsForClasses();
     } catch (err: any) {
       setError(err.response?.data?.message || "Gagal menghapus data siswa");
     }
@@ -576,7 +597,7 @@ export default function StudentsPage() {
         setParsedRowsForImport(null);
         setUploadedFileName("");
         fetchStudents();
-        fetchUniqueClasses();
+        fetchMasterStudentsForClasses();
       }
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || "Gagal melakukan import data siswa");
@@ -833,15 +854,26 @@ export default function StudentsPage() {
           {/* Class filter (Hidden for Wali Kelas who is locked to their class) */}
           {!isWaliKelas && (
             <div className="flex items-center gap-2">
-              <Filter className="w-3.5 h-3.5 text-slate-500" />
-              <span className="text-[11px] font-medium text-slate-400">Filter Kelas:</span>
+              <Filter className={`w-3.5 h-3.5 ${!effectiveUnitId ? "text-slate-700" : "text-slate-500"}`} />
+              <span className={`text-[11px] font-medium ${!effectiveUnitId ? "text-slate-600" : "text-slate-400"}`}>
+                Filter Kelas:
+              </span>
               <select
                 value={filterClass}
                 onChange={(e) => setFilterClass(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-slate-350 px-3 py-1.5 rounded-lg text-[11px] focus:outline-none focus:border-indigo-500 transition-colors"
+                disabled={!effectiveUnitId}
+                className={`bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-lg text-[11px] focus:outline-none transition-colors ${
+                  !effectiveUnitId
+                    ? "opacity-50 cursor-not-allowed text-slate-600 border-slate-900 bg-slate-950/50"
+                    : "text-slate-300 focus:border-indigo-500 cursor-pointer hover:border-slate-700"
+                }`}
               >
-                <option value="">Semua Kelas</option>
-                {availableClasses.map((c) => (
+                <option value="">
+                  {!effectiveUnitId
+                    ? "Pilih Unit Terlebih Dahulu"
+                    : `Semua Kelas (${SCHOOL_UNITS.find((u) => u.id === effectiveUnitId)?.name || ""})`}
+                </option>
+                {currentUnitClasses.map((c) => (
                   <option key={c} value={c}>
                     Kelas {c}
                   </option>
