@@ -20,7 +20,8 @@ import {
   TrendingDown,
   PieChart,
   Shield,
-  Receipt
+  Receipt,
+  History
 } from "lucide-react";
 
 export default function DashboardLayout() {
@@ -131,6 +132,12 @@ export default function DashboardLayout() {
       href: "/transactions",
       icon: BookOpen,
       allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN"],
+    },
+    {
+      name: "Log Aktivitas",
+      href: "/activity-logs",
+      icon: History,
+      allowedRoles: ["SUPER_ADMIN"],
     },
   ];
 

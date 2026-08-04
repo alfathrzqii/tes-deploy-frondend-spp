@@ -12,6 +12,7 @@ import UnpaidPage from "./app/(dashboard)/unpaid/page";
 import ClassRecapPage from "./app/(dashboard)/class-recap/page";
 import TransactionsPage from "./app/(dashboard)/transactions/page";
 import UsersPage from "./app/(dashboard)/users/page";
+import ActivityLogsPage from "./app/(dashboard)/activity-logs/page";
 import DashboardLayout from "./app/(dashboard)/layout";
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/class-recap" element={<ClassRecapPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/users" element={<UsersPage />} />
+          <Route path="/activity-logs" element={<ActivityLogsPage />} />
         </Route>
 
         {/* Redirect from root or fallback to dashboard */}

@@ -14,7 +14,9 @@ import {
   CheckCircle2,
   Calendar,
   Filter,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Edit2,
+  Trash2
 } from "lucide-react";
 
 interface Transaction {
@@ -74,6 +76,8 @@ export default function TransactionsPage() {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   // Form Fields
   const [formType, setFormType] = useState<"INCOME" | "EXPENSE">("INCOME");
@@ -84,6 +88,7 @@ export default function TransactionsPage() {
   const [formUnitId, setFormUnitId] = useState<number>(3); // default SD
 
   const isUnitAdmin = user?.role === "UNIT_ADMIN";
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   // Fetch Categories
   const fetchCategories = async () => {
@@ -141,6 +146,8 @@ export default function TransactionsPage() {
 
   // Handle open create modal
   const openCreateModal = () => {
+    setModalMode("create");
+    setSelectedTransaction(null);
     setFormType("INCOME");
     setFormCategoryId("");
     setFormMethod("CASH");
@@ -150,19 +157,34 @@ export default function TransactionsPage() {
     setIsModalOpen(true);
   };
 
+  // Handle open edit modal
+  const openEditModal = (tr: Transaction) => {
+    setModalMode("edit");
+    setSelectedTransaction(tr);
+    setFormType(tr.type);
+    setFormCategoryId(String(tr.categoryId));
+    setFormMethod(tr.paymentMethod === "MIDTRANS" ? "TRANSFER" : tr.paymentMethod as "CASH" | "TRANSFER");
+    setFormAmount(String(tr.amount));
+    setFormDescription(tr.description || "");
+    setFormUnitId(tr.schoolUnitId);
+    setIsModalOpen(true);
+  };
+
   // Filter categories based on selected transaction type in form
   const filteredCategories = categories.filter(
     (cat) => cat.type === formType
   );
 
-  // Automatically select first available filtered category
+  // Automatically select first available filtered category (only on create mode or if category doesn't belong to list)
   useEffect(() => {
-    if (filteredCategories.length > 0) {
-      setFormCategoryId(String(filteredCategories[0]?.id));
-    } else {
-      setFormCategoryId("");
+    if (modalMode === "create") {
+      if (filteredCategories.length > 0) {
+        setFormCategoryId(String(filteredCategories[0]?.id));
+      } else {
+        setFormCategoryId("");
+      }
     }
-  }, [formType, categories]);
+  }, [formType, categories, modalMode]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,12 +212,32 @@ export default function TransactionsPage() {
     };
 
     try {
-      const response = await api.post("/transactions", payload);
-      setSuccessMsg(response.data.message || "Transaksi berhasil dicatat");
+      if (modalMode === "create") {
+        const response = await api.post("/transactions", payload);
+        setSuccessMsg(response.data.message || "Transaksi berhasil dicatat");
+      } else if (modalMode === "edit" && selectedTransaction) {
+        const response = await api.put(`/transactions/${selectedTransaction.id}`, payload);
+        setSuccessMsg(response.data.message || "Transaksi berhasil diperbarui");
+      }
       setIsModalOpen(false);
       fetchTransactions();
     } catch (err: any) {
       setError(err.response?.data?.message || "Gagal menyimpan pencatatan transaksi");
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus transaksi buku kas ini? Tindakan ini tidak dapat dibatalkan.")) {
+      return;
+    }
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const response = await api.delete(`/transactions/${id}`);
+      setSuccessMsg(response.data.message || "Transaksi berhasil dihapus");
+      fetchTransactions();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Gagal menghapus transaksi");
     }
   };
 
@@ -448,6 +490,7 @@ export default function TransactionsPage() {
                   <th className="px-6 py-4">Keterangan</th>
                   <th className="px-6 py-4">Unit Sekolah</th>
                   <th className="px-6 py-4">Dicatat Oleh</th>
+                  {isSuperAdmin && <th className="px-6 py-4 text-center">Aksi</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50 text-xs text-slate-300">
@@ -492,6 +535,26 @@ export default function TransactionsPage() {
                     <td className="px-6 py-4 text-slate-400">
                       {tr.recordedBy?.name || "Sistem"}
                     </td>
+                    {isSuperAdmin && (
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => openEditModal(tr)}
+                            className="p-1.5 bg-slate-850 hover:bg-slate-750 text-indigo-400 hover:text-indigo-300 rounded border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
+                            title="Edit Transaksi"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(tr.id)}
+                            className="p-1.5 bg-slate-850 hover:bg-slate-750 text-rose-400 hover:text-rose-300 rounded border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
+                            title="Hapus Transaksi"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -512,7 +575,7 @@ export default function TransactionsPage() {
             </button>
 
             <h2 className="text-base font-bold text-white mb-6">
-              Pencatatan Transaksi Buku Kas
+              {modalMode === "create" ? "Pencatatan Transaksi Buku Kas" : "Perbarui Transaksi Buku Kas"}
             </h2>
 
             <form onSubmit={handleSave} className="space-y-4 text-xs">
@@ -638,7 +701,7 @@ export default function TransactionsPage() {
                   type="submit"
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-md shadow-indigo-500/10 transition-colors"
                 >
-                  Catat Transaksi
+                  {modalMode === "create" ? "Catat Transaksi" : "Simpan Perubahan"}
                 </button>
               </div>
             </form>
