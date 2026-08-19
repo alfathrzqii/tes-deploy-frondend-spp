@@ -21,6 +21,7 @@ import {
   PieChart,
   Shield,
   Receipt,
+  Printer,
   History
 } from "lucide-react";
 
@@ -114,6 +115,12 @@ export default function DashboardLayout() {
       href: "/invoices",
       icon: Receipt,
       allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN"],
+    },
+    {
+      name: "Cetak Kwitansi",
+      href: "/receipts",
+      icon: Printer,
+      allowedRoles: ["SUPER_ADMIN", "UNIT_ADMIN", "WALI_KELAS"],
     },
     {
       name: "Tunggakan SPP",

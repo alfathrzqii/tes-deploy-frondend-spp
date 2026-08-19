@@ -13,6 +13,7 @@ import ClassRecapPage from "./app/(dashboard)/class-recap/page";
 import TransactionsPage from "./app/(dashboard)/transactions/page";
 import UsersPage from "./app/(dashboard)/users/page";
 import ActivityLogsPage from "./app/(dashboard)/activity-logs/page";
+import ReceiptsPage from "./app/(dashboard)/receipts/page";
 import DashboardLayout from "./app/(dashboard)/layout";
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/students" element={<StudentsPage />} />
           <Route path="/payments" element={<PaymentsPage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
+          <Route path="/receipts" element={<ReceiptsPage />} />
           <Route path="/unpaid" element={<UnpaidPage />} />
           <Route path="/class-recap" element={<ClassRecapPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
