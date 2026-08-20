@@ -28,6 +28,10 @@ interface Student {
   parentId: number;
   enrollmentYear: number;
   discountAmount: number;
+  discountEquipment: number;
+  discountExtracurricular: number;
+  registrationStatus: string;
+  isFullday?: boolean;
   status: string;
   birthDate?: string | null;
   parent: {
@@ -35,6 +39,7 @@ interface Student {
     email: string | null;
     phoneNumber: string;
   };
+  sdExtracurriculars?: { id: number; name: string; fee: number }[];
 }
 
 import { SCHOOL_UNITS, ALL_PRESET_CLASSES, getClassesByUnitId } from "@/lib/classConstants";
@@ -86,10 +91,17 @@ export default function StudentsPage() {
   const [formUnitId, setFormUnitId] = useState<number>(3); // Default to SD (3)
   const [formYear, setFormYear] = useState<number>(new Date().getFullYear());
   const [formDiscount, setFormDiscount] = useState<number>(0);
+  const [formDiscountEquipment, setFormDiscountEquipment] = useState<number>(0);
+  const [formDiscountExtracurricular, setFormDiscountExtracurricular] = useState<number>(0);
+  const [formRegistrationStatus, setFormRegistrationStatus] = useState<string>("BARU");
+  const [formIsFullday, setFormIsFullday] = useState<boolean>(false);
   const [formBirthDate, setFormBirthDate] = useState(""); // Birth date (YYYY-MM-DD)
   const [formParentName, setFormParentName] = useState("");
   const [formParentEmail, setFormParentEmail] = useState("");
   const [formParentPhoneNumber, setFormParentPhoneNumber] = useState("");
+
+  const [sdExtras, setSdExtras] = useState<{ id: number; name: string; fee: number }[]>([]);
+  const [formSdExtracurricularIds, setFormSdExtracurricularIds] = useState<number[]>([]);
 
   const isUnitAdmin = user?.role === "UNIT_ADMIN";
   const isWaliKelas = user?.role === "WALI_KELAS";
@@ -108,8 +120,18 @@ export default function StudentsPage() {
     }
   };
 
+  const fetchSdExtras = async () => {
+    try {
+      const response = await api.get("/sd-extracurriculars");
+      setSdExtras(response.data.data || []);
+    } catch (err) {
+      console.error("Gagal mengambil eskul SD", err);
+    }
+  };
+
   useEffect(() => {
     fetchMasterStudentsForClasses();
+    fetchSdExtras();
   }, []);
 
   // Reset filterClass whenever filterUnitId changes
@@ -205,10 +227,15 @@ export default function StudentsPage() {
     setFormUnitId(isUnitAdmin || isWaliKelas ? (user?.schoolUnitId || 3) : 3);
     setFormYear(new Date().getFullYear());
     setFormDiscount(0);
+    setFormDiscountEquipment(0);
+    setFormDiscountExtracurricular(0);
+    setFormRegistrationStatus("BARU");
+    setFormIsFullday(false);
     setFormBirthDate("");
     setFormParentName("");
     setFormParentEmail("");
     setFormParentPhoneNumber("");
+    setFormSdExtracurricularIds([]);
     setIsModalOpen(true);
   };
 
@@ -221,10 +248,17 @@ export default function StudentsPage() {
     setFormUnitId(student.schoolUnitId);
     setFormYear(student.enrollmentYear);
     setFormDiscount(student.discountAmount);
+    setFormDiscountEquipment(student.discountEquipment || 0);
+    setFormDiscountExtracurricular(student.discountExtracurricular || 0);
+    setFormRegistrationStatus(student.registrationStatus || "BARU");
+    setFormIsFullday(student.isFullday || false);
     setFormBirthDate(student.birthDate || "");
     setFormParentName(student.parent.name);
     setFormParentEmail(student.parent.email || "");
     setFormParentPhoneNumber(student.parent.phoneNumber || "");
+    setFormSdExtracurricularIds(
+      student.sdExtracurriculars ? student.sdExtracurriculars.map((e) => e.id) : []
+    );
     setIsModalOpen(true);
   };
 
@@ -273,10 +307,15 @@ export default function StudentsPage() {
           schoolUnitId: formUnitId,
           enrollmentYear: formYear,
           discountAmount: Number(formDiscount),
+          discountEquipment: Number(formDiscountEquipment),
+          discountExtracurricular: Number(formDiscountExtracurricular),
+          registrationStatus: formRegistrationStatus,
+          isFullday: formIsFullday,
           birthDate: formBirthDate || null,
           parentName: formParentName.trim(),
           parentEmail: formParentEmail.trim() || null,
           parentPhoneNumber: formParentPhoneNumber.trim(),
+          sdExtracurricularIds: formSdExtracurricularIds,
         };
         const response = await api.post("/students", payload);
         setSuccessMsg(response.data.message || "Data siswa berhasil didaftarkan");
@@ -287,10 +326,15 @@ export default function StudentsPage() {
           schoolUnitId: formUnitId,
           enrollmentYear: formYear,
           discountAmount: Number(formDiscount),
+          discountEquipment: Number(formDiscountEquipment),
+          discountExtracurricular: Number(formDiscountExtracurricular),
+          registrationStatus: formRegistrationStatus,
+          isFullday: formIsFullday,
           birthDate: formBirthDate || null,
           parentName: formParentName.trim(),
           parentEmail: formParentEmail.trim() || null,
           parentPhoneNumber: formParentPhoneNumber.trim(),
+          sdExtracurricularIds: formSdExtracurricularIds,
         };
         const response = await api.put(`/students/${selectedStudent.id}`, payload);
         setSuccessMsg(response.data.message || "Data siswa berhasil diperbarui");
@@ -916,8 +960,8 @@ export default function StudentsPage() {
                 <tr className="border-b border-slate-800/80 bg-slate-950/30 text-[11px] font-bold tracking-wider text-slate-400 uppercase">
                   <th className="px-6 py-4">NIS (Student Number)</th>
                   <th className="px-6 py-4">Nama Siswa</th>
-                  <th className="px-6 py-4">Unit / Kelas / Lahir</th>
-                  <th className="px-6 py-4">Nominal Diskon SPP</th>
+                  <th className="px-6 py-4">Unit / Kelas / Status</th>
+                  <th className="px-6 py-4">Detail Potongan (Diskon)</th>
                   <th className="px-6 py-4">Wali Murid (Parent)</th>
                   <th className="px-6 py-4 text-right">Aksi</th>
                 </tr>
@@ -945,20 +989,68 @@ export default function StudentsPage() {
                               Kelas {student.className}
                             </span>
                           )}
+                          {student.registrationStatus === "BARU" && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-450 border border-emerald-500/20">
+                              Baru
+                            </span>
+                          )}
+                          {student.registrationStatus === "NAIK_KELAS" && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-500/10 text-sky-450 border border-sky-500/20">
+                              Naik Kelas
+                            </span>
+                          )}
+                          {student.registrationStatus === "TINGGAL_KELAS" && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-455 border border-rose-500/20">
+                              Tinggal Kelas
+                            </span>
+                          )}
+                          {student.isFullday && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              FULLDAY
+                            </span>
+                          )}
                         </div>
+                        {student.schoolUnitId === 3 && student.sdExtracurriculars && student.sdExtracurriculars.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {student.sdExtracurriculars.map((e) => (
+                              <span
+                                key={e.id}
+                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-violet-500/10 text-violet-450 border border-violet-500/20"
+                              >
+                                {e.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <span className="text-[10px] text-slate-400">
                           Angkatan {student.enrollmentYear} {student.birthDate ? `| Lahir: ${student.birthDate}` : ""}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                        student.discountAmount > 0
-                          ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                          : "bg-slate-800/60 text-slate-500 border-slate-700/60"
-                      }`}>
-                        {formatRupiah(student.discountAmount)}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        {student.discountAmount > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] uppercase px-1 py-0.2 rounded font-extrabold bg-blue-500/10 text-blue-450 border border-blue-500/20">SPP</span>
+                            <span className="text-[10px] font-bold text-slate-300">{formatRupiah(student.discountAmount)}</span>
+                          </div>
+                        )}
+                        {student.discountEquipment > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] uppercase px-1 py-0.2 rounded font-extrabold bg-purple-500/10 text-purple-450 border border-purple-500/20">Alat</span>
+                            <span className="text-[10px] font-bold text-slate-300">{formatRupiah(student.discountEquipment)}</span>
+                          </div>
+                        )}
+                        {student.discountExtracurricular > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] uppercase px-1 py-0.2 rounded font-extrabold bg-amber-500/10 text-amber-450 border border-amber-500/20">Ekskul</span>
+                            <span className="text-[10px] font-bold text-slate-300">{formatRupiah(student.discountExtracurricular)}</span>
+                          </div>
+                        )}
+                        {student.discountAmount === 0 && student.discountEquipment === 0 && student.discountExtracurricular === 0 && (
+                          <span className="text-[10px] text-slate-500 font-medium">Tanpa Potongan</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
@@ -1301,6 +1393,107 @@ export default function StudentsPage() {
                   className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>
+
+              {/* Status Pendaftaran field */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-300">Status Pendaftaran / Kenaikan</label>
+                <select
+                  value={formRegistrationStatus}
+                  onChange={(e) => setFormRegistrationStatus(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
+                >
+                  <option value="BARU">Baru (PPDB / Siswa Baru)</option>
+                  <option value="NAIK_KELAS">Naik Kelas (Siswa Lama / Naik Jenjang)</option>
+                  <option value="TINGGAL_KELAS">Tinggal Kelas</option>
+                </select>
+              </div>
+
+              {/* Conditional Equipment & Extracurricular discounts for KB & RA */}
+              {(formUnitId === 1 || formUnitId === 2) && (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-slate-300">Nominal Diskon Peralatan (Rupiah)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Contoh: 50000"
+                      value={formDiscountEquipment}
+                      onChange={(e) => setFormDiscountEquipment(Number(e.target.value))}
+                      className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-slate-300">Nominal Diskon Ekstrakurikuler (Rupiah)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Contoh: 30000"
+                      value={formDiscountExtracurricular}
+                      onChange={(e) => setFormDiscountExtracurricular(Number(e.target.value))}
+                      className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 transition-colors"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
+                    <input
+                      type="checkbox"
+                      id="isFulldayCheckbox"
+                      checked={formIsFullday}
+                      onChange={(e) => setFormIsFullday(e.target.checked)}
+                      className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                    />
+                    <label htmlFor="isFulldayCheckbox" className="font-semibold text-amber-300 cursor-pointer select-none text-xs">
+                      Ikut Program Fullday (Opsional - KB & RA)
+                    </label>
+                  </div>
+                </>
+              )}
+
+              {/* Optional SD Extracurricular selection */}
+              {formUnitId === 3 && sdExtras.length > 0 && (
+                <div className="bg-slate-950/60 p-4 border border-slate-850 rounded-xl space-y-3">
+                  <h3 className="font-bold text-violet-400 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400"></span>
+                    Program Ekstrakurikuler SD (Opsional)
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-1">Pilih eskul yang diikuti oleh siswa ini:</p>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    {sdExtras.map((item) => {
+                      const isChecked = formSdExtracurricularIds.includes(item.id);
+                      return (
+                        <label
+                          key={item.id}
+                          className={`flex items-center gap-2 p-2 rounded-lg border text-slate-350 font-medium transition-all cursor-pointer ${
+                            isChecked
+                              ? "bg-violet-950/20 border-violet-500/30 text-violet-300"
+                              : "bg-slate-900/40 border-slate-800 hover:border-slate-700"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormSdExtracurricularIds([...formSdExtracurricularIds, item.id]);
+                              } else {
+                                setFormSdExtracurricularIds(
+                                  formSdExtracurricularIds.filter((id) => id !== item.id)
+                                );
+                              }
+                            }}
+                            className="rounded border-slate-800 text-violet-650 focus:ring-violet-500 cursor-pointer"
+                          />
+                          <div className="flex flex-col">
+                            <span className="text-[11px] font-bold">{item.name}</span>
+                            <span className="text-[9px] text-slate-500">{formatRupiah(item.fee)}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Parent Info Section */}
               <div className="pt-2 border-t border-slate-800/80 mt-4 space-y-3">

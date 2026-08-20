@@ -17,13 +17,14 @@ import {
   RefreshCw,
   Trash2,
   Check,
-  Printer
+  Printer,
+  X
 } from "lucide-react";
 
 interface Invoice {
   id: number;
   studentId: number;
-  invoiceType: "SPP" | "UANG_PENGEMBANGAN" | "EKSTRAKURIKULER" | "KEGIATAN" | "LAINNYA";
+  invoiceType: "SPP" | "FULLDAY" | "UANG_PENGEMBANGAN" | "UANG_PERALATAN" | "EKSTRAKURIKULER" | "DAFTAR_ULANG" | "SERAGAM" | "KEGIATAN" | "LAINNYA";
   month: number;
   year: number;
   baseAmount: number;
@@ -175,240 +176,361 @@ export default function InvoicesPage() {
     return SCHOOL_UNITS.find((u) => u.id === unitId)?.name || `Unit ${unitId}`;
   };
 
-  const handlePrintReceipt = (inv: Invoice) => {
-    const tx = inv.transactions && inv.transactions.length > 0 ? inv.transactions[0] : null;
-    const rawMethod = tx ? tx.paymentMethod : "CASH";
-    const displayMethod = rawMethod.toUpperCase() === "MIDTRANS" ? "QRIS" : rawMethod;
-    const dateStr = tx ? new Date(tx.date).toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    }) + " WIB" : "-";
+  const getInvoiceTypeName = (type: string) => {
+    if (type === "SPP") return "SPP Bulanan";
+    if (type === "FULLDAY") return "Biaya Fullday Bulanan";
+    if (type === "UANG_PENGEMBANGAN") return "Uang Pengembangan";
+    if (type === "UANG_PERALATAN") return "Uang Peralatan";
+    if (type === "EKSTRAKURIKULER") return "Uang Ekstrakurikuler";
+    if (type === "DAFTAR_ULANG") return "Uang Daftar Ulang";
+    if (type === "SERAGAM") return "Uang Seragam";
+    return type;
+  };
 
-    const amountText = formatRupiah(inv.amount);
+  // Print Selection Modal states
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [modalStudentInvoices, setModalStudentInvoices] = useState<Invoice[]>([]);
+  const [modalSelectedKeys, setModalSelectedKeys] = useState<string[]>([]);
+  const [modalStudentName, setModalStudentName] = useState("");
 
-    const terbilang = (num: number): string => {
+  const openPrintModalForInvoice = async (inv: Invoice) => {
+    setModalStudentName(inv.student.name);
+    try {
+      const res = await api.get(`/invoices/student/${inv.student.studentNumber}`);
+      const fetchedInvs: Invoice[] = res.data.data || [];
+      setModalStudentInvoices(fetchedInvs.length > 0 ? fetchedInvs : [inv]);
+      
+      const targetKey = `${inv.invoiceType}-${inv.month}-${inv.year}`;
+      let keys: string[] = [targetKey];
+      for (const item of fetchedInvs) {
+        const k = `${item.invoiceType}-${item.month}-${item.year}`;
+        if (!keys.includes(k) && keys.length < 4) {
+          keys.push(k);
+        }
+      }
+      setModalSelectedKeys(keys);
+    } catch {
+      setModalStudentInvoices([inv]);
+      setModalSelectedKeys([`${inv.invoiceType}-${inv.month}-${inv.year}`]);
+    }
+    setIsPrintModalOpen(true);
+  };
+
+  const handlePrintReceipt = (inv?: Invoice, customInvoices?: Invoice[]) => {
+    const terbilangFunc = (num: number): string => {
       const ones = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
       if (num < 12) return ones[num];
-      if (num < 20) return terbilang(num - 10) + " Belas";
-      if (num < 100) return ones[Math.floor(num / 10)] + " Puluh " + terbilang(num % 10);
-      if (num < 200) return "Seratus " + terbilang(num - 100);
-      if (num < 1000) return ones[Math.floor(num / 100)] + " Ratus " + terbilang(num % 100);
-      if (num < 2000) return "Seribu " + terbilang(num - 1000);
-      if (num < 1000000) return terbilang(Math.floor(num / 1000)) + " Ribu " + terbilang(num % 1000);
-      if (num < 1000000000) return terbilang(Math.floor(num / 1000000)) + " Juta " + terbilang(num % 1000000);
+      if (num < 20) return terbilangFunc(num - 10) + " Belas";
+      if (num < 100) return ones[Math.floor(num / 10)] + " Puluh " + terbilangFunc(num % 10);
+      if (num < 200) return "Seratus " + terbilangFunc(num - 100);
+      if (num < 1000) return ones[Math.floor(num / 100)] + " Ratus " + terbilangFunc(num % 100);
+      if (num < 2000) return "Seribu " + terbilangFunc(num - 1000);
+      if (num < 1000000) return terbilangFunc(Math.floor(num / 1000)) + " Ribu " + terbilangFunc(num % 1000);
+      if (num < 1000000000) return terbilangFunc(Math.floor(num / 1000000)) + " Juta " + terbilangFunc(num % 1000000);
       return "";
     };
 
-    const terbilangStr = terbilang(inv.amount) ? terbilang(inv.amount) + " Rupiah" : "Nol Rupiah";
+    let selectedFourInvoices: Invoice[] = [];
+    if (customInvoices && customInvoices.length > 0) {
+      selectedFourInvoices = customInvoices.slice(0, 4);
+    } else if (inv) {
+      const sameStudentInvoices = invoices.filter(
+        (i) => i.studentId === inv.studentId && i.invoiceType === inv.invoiceType && i.year === inv.year
+      );
+      const currentMonth = inv.month || 7;
+      const idx = sameStudentInvoices.findIndex((i) => i.month === currentMonth);
+      if (idx !== -1) {
+        const startIdx = Math.max(0, Math.min(idx, sameStudentInvoices.length - 4));
+        selectedFourInvoices = sameStudentInvoices.slice(startIdx, startIdx + 4);
+      }
+      if (selectedFourInvoices.length === 0) {
+        selectedFourInvoices = [inv];
+      }
+    }
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
+    const slotsHtml = Array.from({ length: 4 }).map((_, slotIdx) => {
+      const itemInv = selectedFourInvoices[slotIdx];
+      if (!itemInv) {
+        return `
+          <div class="receipt-slot empty-slot">
+            <div class="empty-slot-text">
+              <span>Potongan Kertas A4 (Kosong)</span>
+            </div>
+          </div>
+        `;
+      }
+
+      const itemTx = itemInv.transactions && itemInv.transactions.length > 0 ? itemInv.transactions[0] : null;
+      const itemAmountText = formatRupiah(itemInv.amount);
+      const itemTerbilang = terbilangFunc(itemInv.amount) ? terbilangFunc(itemInv.amount) + " Rupiah" : "Nol Rupiah";
+      const itemMethod = itemTx?.paymentMethod ? (itemTx.paymentMethod.toUpperCase() === "MIDTRANS" ? "QRIS" : itemTx.paymentMethod) : "CASH";
+      const itemDateStr = itemTx?.date
+        ? new Date(itemTx.date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
+        : "-";
+
+      const periodDesc = itemInv.invoiceType === "SPP" || itemInv.invoiceType === "FULLDAY"
+        ? `${getInvoiceTypeName(itemInv.invoiceType)} - Bulan ${MONTHS.find((m) => m.value === itemInv.month)?.name} ${itemInv.year}`
+        : `${getInvoiceTypeName(itemInv.invoiceType)} - Tahun ${itemInv.year}`;
+
+      return `
+        <div class="receipt-slot">
+          <div class="stamp">${itemInv.status === "PAID" ? "LUNAS" : "BELUM LUNAS"}</div>
+          <div class="header">
+            <div>
+              <div class="school-title">Yayasan Al Uswah Terpadu</div>
+              <div class="school-sub">SIKUAT Keuangan Sekolah</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="kw-no">KW-${itemInv.id}-${itemInv.student.studentNumber}</div>
+              <div class="kw-date">${itemDateStr}</div>
+            </div>
+          </div>
+
+          <div class="title-banner">KWITANSI PEMBAYARAN</div>
+
+          <div class="row-data">
+            <div class="label">Telah Diterima Dari</div>
+            <div class="value" style="font-weight: 700;">${itemInv.student.parent?.name || "Wali Siswa"} (Wali ${itemInv.student.name})</div>
+          </div>
+
+          <div class="row-data">
+            <div class="label">Nama Siswa / NIS</div>
+            <div class="value" style="font-weight: 600;">${itemInv.student.name} (NIS: ${itemInv.student.studentNumber})</div>
+          </div>
+
+          <div class="row-data">
+            <div class="label">Kelas / Unit</div>
+            <div class="value">Kelas ${itemInv.student.className} / Unit ${getUnitName(itemInv.student.schoolUnitId)}</div>
+          </div>
+
+          <div class="row-data">
+            <div class="label">Untuk Pembayaran</div>
+            <div class="value" style="font-weight: 600;">${periodDesc}</div>
+          </div>
+
+          <div class="row-data">
+            <div class="label">Metode Pembayaran</div>
+            <div class="value">
+              <span class="badge-method">${itemMethod}</span>
+            </div>
+          </div>
+
+          <div class="row-data">
+            <div class="label">Jumlah Uang</div>
+            <div class="value" style="font-size: 11px; font-weight: 800; color: #1e3a8a;">${itemAmountText}</div>
+          </div>
+
+          <div class="terbilang-box">
+            Terbilang: ${itemTerbilang}
+          </div>
+
+          <div class="footer-receipt">
+            <div class="signature">
+              <div class="sig-title">Pembayar</div>
+              <div class="sig-name">${itemInv.student.parent?.name || "Wali Murid"}</div>
+            </div>
+            <div class="signature">
+              <div class="sig-title">Petugas Kasir</div>
+              <div class="sig-name">${user?.name || "Admin Kasir"}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
     printWindow.document.write(`
       <html>
         <head>
-          <title>Kwitansi Pembayaran SIKUAT - ${inv.student.name}</title>
+          <title>Kwitansi Pembayaran A4 (4-in-1) - ${selectedFourInvoices[0]?.student?.name || modalStudentName || 'Siswa'}</title>
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Inter:wght@400;600;850&display=swap');
-            body {
-              font-family: 'Inter', sans-serif;
-              color: #1e293b;
-              margin: 0;
-              padding: 40px;
-              background: #fff;
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;850&display=swap');
+            @page {
+              size: A4 portrait;
+              margin: 3mm;
             }
-            .receipt-border {
-              border: 2px solid #0f172a;
-              padding: 30px;
-              max-width: 750px;
-              margin: 0 auto;
-              position: relative;
-              border-radius: 12px;
-              box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
-              background-color: #fff;
-              background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='150' height='150' viewBox='0 0 150 150'><text fill='%23e2e8f0' font-size='13' font-family='sans-serif' font-weight='900' x='75' y='75' transform='rotate(-30 75 75)' text-anchor='middle'>SIKUAT</text></svg>");
-              background-repeat: repeat;
+            * {
+              box-sizing: border-box;
+            }
+            html, body {
+              height: 100%;
+              margin: 0;
+              padding: 0;
+              overflow: hidden;
+              font-family: 'Inter', sans-serif;
+              color: #0f172a;
+              background: #fff;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
+            }
+            .a4-grid {
+              width: 200mm;
+              height: 280mm;
+              max-height: 280mm;
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              grid-template-rows: 1fr 1fr;
+              gap: 4mm;
+              margin: 0 auto;
+              page-break-after: avoid;
+              page-break-inside: avoid;
+            }
+            .receipt-slot {
+              border: 1px dashed #64748b;
+              border-radius: 6px;
+              padding: 6px 8px;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              position: relative;
+              background: #ffffff;
+              height: 136mm;
+              max-height: 136mm;
+              overflow: hidden;
+            }
+            .empty-slot {
+              border: 1px dashed #cbd5e1;
+              background: #fafafa;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+            .empty-slot-text {
+              font-size: 9px;
+              font-weight: 600;
+              color: #94a3b8;
+              text-transform: uppercase;
+              letter-spacing: 1px;
             }
             .header {
               display: flex;
               justify-content: space-between;
-              align-items: center;
-              border-bottom: 2px solid #e2e8f0;
-              padding-bottom: 20px;
-              margin-bottom: 25px;
+              align-items: flex-start;
+              border-bottom: 1.5px solid #cbd5e1;
+              padding-bottom: 4px;
+              margin-bottom: 4px;
             }
             .school-title {
-              font-size: 18px;
+              font-size: 10px;
               font-weight: 850;
               text-transform: uppercase;
-              letter-spacing: 0.5px;
               color: #0f172a;
+              line-height: 1.2;
             }
             .school-sub {
-              font-size: 11px;
+              font-size: 7.5px;
               color: #64748b;
-              margin-top: 4px;
+              margin-top: 1px;
             }
-            .receipt-title {
-              font-size: 20px;
-              font-weight: 850;
+            .kw-no {
+              font-size: 8px;
+              font-weight: 700;
+              color: #0f172a;
+              text-align: right;
+            }
+            .kw-date {
+              font-size: 7.5px;
+              color: #64748b;
+              text-align: right;
+            }
+            .title-banner {
               text-align: center;
-              letter-spacing: 1px;
-              margin-bottom: 30px;
-              text-transform: uppercase;
+              font-size: 10px;
+              font-weight: 850;
               color: #1e3a8a;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              margin: 2px 0 6px 0;
             }
             .row-data {
               display: flex;
-              margin-bottom: 18px;
-              font-size: 13px;
-              line-height: 1.6;
+              margin-bottom: 4px;
+              font-size: 8.5px;
+              line-height: 1.3;
             }
             .label {
-              width: 180px;
+              width: 95px;
               font-weight: 600;
               color: #475569;
+              flex-shrink: 0;
             }
             .value {
               flex: 1;
               border-bottom: 1px dashed #cbd5e1;
-              padding-bottom: 2px;
+              padding-bottom: 1px;
               color: #0f172a;
             }
             .terbilang-box {
               background: #f8fafc;
               border: 1px solid #e2e8f0;
-              padding: 12px 15px;
-              border-radius: 8px;
+              padding: 3px 6px;
+              border-radius: 4px;
               font-style: italic;
               font-weight: 600;
-              color: #0f172a;
-              margin: 25px 0;
-              font-size: 12px;
-            }
-            .footer-receipt {
-              display: flex;
-              justify-content: space-between;
-              margin-top: 50px;
-            }
-            .signature {
-              text-align: center;
-              width: 220px;
-            }
-            .signature-space {
-              height: 60px;
-            }
-            .signature-name {
-              font-weight: 700;
-              border-top: 1px solid #94a3b8;
-              padding-top: 6px;
-              font-size: 12px;
-              color: #0f172a;
+              font-size: 7.5px;
+              color: #334155;
+              margin: 2px 0;
             }
             .badge-method {
               display: inline-block;
               background: #e0f2fe;
               color: #0369a1;
               border: 1px solid #bae6fd;
-              padding: 3px 8px;
+              padding: 1px 4px;
               font-weight: 700;
-              font-size: 10px;
-              border-radius: 4px;
+              font-size: 7.5px;
+              border-radius: 3px;
               text-transform: uppercase;
             }
             .stamp {
               position: absolute;
-              bottom: 150px;
-              left: 55%;
-              transform: translateX(-50%) rotate(-7deg);
-              border: 3px solid #10b981;
+              bottom: 40px;
+              right: 12px;
+              transform: rotate(-6deg);
+              border: 2px solid #10b981;
               color: #10b981;
-              font-size: 13px;
+              font-size: 8.5px;
               font-weight: 900;
-              padding: 8px 16px;
+              padding: 2px 6px;
               text-transform: uppercase;
-              border-radius: 8px;
-              letter-spacing: 2px;
-              opacity: 0.8;
+              border-radius: 4px;
+              letter-spacing: 1px;
+              opacity: 0.85;
+            }
+            .footer-receipt {
+              display: flex;
+              justify-content: space-between;
+              margin-top: 6px;
+              padding-top: 2px;
+            }
+            .signature {
+              text-align: center;
+              width: 80px;
+            }
+            .sig-title {
+              font-size: 7.5px;
+              color: #64748b;
+              margin-bottom: 20px;
+            }
+            .sig-name {
+              font-weight: 700;
+              border-top: 1px solid #94a3b8;
+              padding-top: 2px;
+              font-size: 7.5px;
+              color: #0f172a;
             }
             @media print {
               body {
                 padding: 0;
               }
-              .no-print {
-                display: none;
-              }
             }
           </style>
         </head>
         <body>
-          <div class="receipt-border">
-            <div class="stamp">LUNAS / PAID</div>
-            <div class="header">
-              <div>
-                <div class="school-title">Yayasan Al Uswah Terpadu</div>
-                <div class="school-sub">Sistem Informasi Keuangan Terpadu (SIKUAT)</div>
-              </div>
-              <div style="text-align: right;">
-                <div style="font-size: 11px; font-weight: 700; color: #0f172a;">No. Kwitansi: KW-${inv.id}-${inv.student.studentNumber}</div>
-                <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Tanggal: ${dateStr.split(" pukul ")[0]}</div>
-              </div>
-            </div>
-            
-            <div class="receipt-title">Kwitansi Pembayaran SPP</div>
-
-            <div class="row-data">
-              <div class="label">Telah Diterima Dari</div>
-              <div class="value" style="font-weight: 700;">${inv.student.name} (NIS: ${inv.student.studentNumber})</div>
-            </div>
-
-            <div class="row-data">
-              <div class="label">Kelas / Unit</div>
-              <div class="value">Kelas ${inv.student.className} / Unit ${SCHOOL_UNITS.find(u => u.id === inv.student.schoolUnitId)?.name || 'SD'}</div>
-            </div>
-
-            <div class="row-data">
-              <div class="label">Untuk Pembayaran</div>
-              <div class="value" style="font-weight: 600;">
-                ${inv.invoiceType === "SPP" ? `SPP Bulanan - Bulan ${MONTHS.find(m => m.value === inv.month)?.name} ${inv.year}` : `Uang Pengembangan - Tahun ${inv.year}`}
-              </div>
-            </div>
-
-            <div class="row-data">
-              <div class="label">Metode Pembayaran</div>
-              <div class="value">
-                <span class="badge-method">${displayMethod}</span>
-                ${tx && tx.description ? `<span style="margin-left: 10px; font-size: 11px; color: #64748b;">(${tx.description})</span>` : ""}
-              </div>
-            </div>
-
-            <div class="row-data">
-              <div class="label">Jumlah Uang</div>
-              <div class="value" style="font-size: 15px; font-weight: 800; color: #1e3a8a;">${amountText}</div>
-            </div>
-
-            <div class="terbilang-box">
-              Terbilang: ${terbilangStr}
-            </div>
-
-            <div class="footer-receipt">
-              <div class="signature">
-                <div style="font-size: 11px; color: #64748b; margin-bottom: 40px;">Wali Murid / Pembayar</div>
-                <div class="signature-space"></div>
-                <div class="signature-name">${inv.student.parent.name}</div>
-              </div>
-              
-              <div class="signature">
-                <div style="font-size: 11px; color: #64748b; margin-bottom: 40px;">Petugas Administrasi</div>
-                <div class="signature-space"></div>
-                <div class="signature-name">${tx && tx.recordedById ? "Admin SIKUAT" : "Sistem Online SIKUAT"}</div>
-              </div>
-            </div>
+          <div class="a4-grid">
+            ${slotsHtml}
           </div>
           
           <script>
@@ -660,9 +782,9 @@ export default function InvoicesPage() {
                           ) : (
                             <>
                               <button
-                                onClick={() => handlePrintReceipt(inv)}
+                                onClick={() => openPrintModalForInvoice(inv)}
                                 className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer flex items-center gap-1"
-                                title="Cetak kwitansi pembayaran"
+                                title="Pilih dan cetak kwitansi A4"
                               >
                                 <Printer className="w-3 h-3" /> Kwitansi
                               </button>
@@ -717,6 +839,104 @@ export default function InvoicesPage() {
           </div>
         )}
       </div>
+
+      {/* Modal Selection Kwitansi A4 */}
+      {isPrintModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in text-xs">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl relative space-y-4">
+            <button
+              onClick={() => setIsPrintModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <Printer className="w-5 h-5 text-indigo-400" />
+              Pilih Kwitansi untuk Cetak A4 (Maksimal 4)
+            </h2>
+            <p className="text-xs text-slate-400">
+              Centang hingga 4 tagihan/bulan milik <b>{modalStudentName}</b> yang ingin dicetak bersama dalam 1 lembar kertas A4:
+            </p>
+
+            <div className="max-h-60 overflow-y-auto space-y-2 border border-slate-800 p-3 rounded-xl bg-slate-950">
+              {modalStudentInvoices.map((inv) => {
+                const key = `${inv.invoiceType}-${inv.month}-${inv.year}`;
+                const isChecked = modalSelectedKeys.includes(key);
+                return (
+                  <label
+                    key={key}
+                    className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                      isChecked
+                        ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-200"
+                        : "bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          if (isChecked) {
+                            setModalSelectedKeys(modalSelectedKeys.filter((k) => k !== key));
+                          } else {
+                            if (modalSelectedKeys.length >= 4) {
+                              alert("Maksimal 4 kwitansi dalam 1 lembar kertas A4");
+                              return;
+                            }
+                            setModalSelectedKeys([...modalSelectedKeys, key]);
+                          }
+                        }}
+                        className="w-4 h-4 accent-indigo-500 rounded cursor-pointer"
+                      />
+                      <div>
+                        <p className="font-bold text-white">
+                          {getInvoiceTypeName(inv.invoiceType)} - {inv.invoiceType === "SPP" || inv.invoiceType === "FULLDAY" ? `${MONTHS.find(m => m.value === inv.month)?.name} ${inv.year}` : `Tahun ${inv.year}`}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-mono">
+                          Nominal: {formatRupiah(inv.amount)} | Status: <span className={inv.status === "PAID" ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>{inv.status === "PAID" ? "LUNAS" : "BELUM LUNAS"}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+              <span className="text-xs text-indigo-400 font-semibold">
+                {modalSelectedKeys.length} / 4 kwitansi terpilih
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg transition-all text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (modalSelectedKeys.length === 0) {
+                      alert("Pilih minimal 1 kwitansi untuk dicetak");
+                      return;
+                    }
+                    const targetInvs = modalStudentInvoices.filter((i) =>
+                      modalSelectedKeys.includes(`${i.invoiceType}-${i.month}-${i.year}`)
+                    );
+                    setIsPrintModalOpen(false);
+                    handlePrintReceipt(targetInvs[0], targetInvs);
+                  }}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition-all text-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Printer className="w-4 h-4" /> Cetak Lembar A4 ({modalSelectedKeys.length})
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

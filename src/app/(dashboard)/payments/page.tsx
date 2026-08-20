@@ -28,11 +28,15 @@ interface Student {
   parentId: number;
   enrollmentYear: number;
   discountAmount: number;
+  discountEquipment?: number;
+  discountExtracurricular?: number;
+  registrationStatus?: string;
   parent: {
     name: string;
     phoneNumber: string;
     email: string | null;
   };
+  sdExtracurriculars?: { id: number; name: string; fee: number }[];
 }
 
 interface SppTariff {
@@ -52,7 +56,7 @@ interface InvoiceTransaction {
 interface DBInvoice {
   id: number;
   studentId: number;
-  invoiceType: "SPP" | "EKSTRAKURIKULER" | "KEGIATAN" | "UANG_PENGEMBANGAN" | "LAINNYA";
+  invoiceType: "SPP" | "EKSTRAKURIKULER" | "UANG_PERALATAN" | "DAFTAR_ULANG" | "SERAGAM" | "UANG_PENGEMBANGAN" | "KEGIATAN" | "LAINNYA" | "FULLDAY";
   month: number;
   year: number;
   baseAmount: number;
@@ -118,7 +122,7 @@ export default function PaymentsPage() {
   const [studentInvoices, setStudentInvoices] = useState<DBInvoice[]>([]);
   
   // Payment states
-  const [invoiceType, setInvoiceType] = useState<"SPP" | "UANG_PENGEMBANGAN">("SPP");
+  const [invoiceType, setInvoiceType] = useState<"SPP" | "FULLDAY" | "UANG_PENGEMBANGAN" | "UANG_PERALATAN" | "EKSTRAKURIKULER" | "DAFTAR_ULANG" | "SERAGAM">("SPP");
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [paymentAmount, setPaymentAmount] = useState<string>("");
@@ -130,6 +134,10 @@ export default function PaymentsPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [receiptData, setReceiptData] = useState<any | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+
+  // Print Selection Modal states
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [selectedForPrintKeys, setSelectedForPrintKeys] = useState<string[]>([]);
 
   // Fetch tariffs on mount to help calculate discounted estimates
   const fetchTariffs = async () => {
@@ -145,6 +153,39 @@ export default function PaymentsPage() {
     fetchTariffs();
   }, []);
 
+  const getInvoiceTypeName = (type: string) => {
+    if (type === "SPP") return "SPP Bulanan";
+    if (type === "UANG_PENGEMBANGAN") return "Uang Pengembangan";
+    if (type === "UANG_PERALATAN") return "Uang Peralatan";
+    if (type === "EKSTRAKURIKULER") return "Uang Ekstrakurikuler (Ekskul)";
+    if (type === "DAFTAR_ULANG") return "Uang Daftar Ulang";
+    if (type === "SERAGAM") return "Uang Seragam";
+    if (type === "FULLDAY") return "Biaya Fullday Bulanan";
+    return type;
+  };
+
+  const getNonSppDetails = (type: typeof invoiceType) => {
+    let inv;
+    if (type === "FULLDAY") {
+      inv = studentInvoices.find(
+        (i) => i.invoiceType === type && i.year === selectedYear && i.month === selectedMonth
+      );
+    } else {
+      inv = studentInvoices.find((i) => i.invoiceType === type && i.year === selectedYear);
+    }
+    if (!inv) return { status: "PENDING", total: 0, baseAmount: 0, discountApplied: 0, alreadyPaid: 0, remaining: 0 };
+    const paid = (inv.transactions || []).reduce((sum, tx) => sum + tx.amount, 0);
+    return {
+      status: inv.status,
+      total: inv.amount,
+      baseAmount: inv.baseAmount || inv.amount,
+      discountApplied: inv.discountApplied || 0,
+      alreadyPaid: paid,
+      remaining: inv.amount - paid,
+      invoice: inv
+    };
+  };
+
   // Update matching tariff when student & unit/year changes
   useEffect(() => {
     if (foundStudent && tariffs.length > 0) {
@@ -154,32 +195,21 @@ export default function PaymentsPage() {
           t.enrollmentYear === foundStudent.enrollmentYear
       );
       setMatchingTariff(match || null);
-      
-      // Auto-set payment amount based on tariff discount
-      if (match && invoiceType === "SPP") {
-        const discount = foundStudent.discountAmount || 0;
-        const netAmount = Math.max(0, match.amount - discount);
-        setPaymentAmount(String(netAmount));
-      }
     }
-  }, [foundStudent, tariffs, invoiceType]);
+  }, [foundStudent, tariffs]);
 
-  // Helper to fetch student invoices for specific year
-  const fetchStudentInvoices = async (studentNum: string, year: number) => {
-    try {
-      const invResponse = await api.get(`/invoices/student/${studentNum}?year=${year}`);
-      setStudentInvoices(invResponse.data.allInvoices || []);
-    } catch (err) {
-      console.error("Gagal mengambil data invoice siswa", err);
-    }
-  };
-
-  // Auto re-fetch invoices when selected year changes or student changes
+  // Auto-set payment amount based on tariff discount and selected invoice type
   useEffect(() => {
     if (foundStudent) {
-      fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
+      if (invoiceType === "SPP") {
+        const sppDetail = getSelectedSPPDetails();
+        setPaymentAmount(String(sppDetail.remaining));
+      } else {
+        const nonSppDetail = getNonSppDetails(invoiceType);
+        setPaymentAmount(String(nonSppDetail.remaining));
+      }
     }
-  }, [foundStudent, selectedYear]);
+  }, [foundStudent, invoiceType, selectedMonth, selectedYear, studentInvoices]);
 
   const handleSearchStudent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -202,8 +232,9 @@ export default function PaymentsPage() {
 
       if (match) {
         setFoundStudent(match);
-        // Fetch existing invoices for student for selected year
-        fetchStudentInvoices(match.studentNumber, selectedYear);
+        // Fetch existing invoices for student
+        const invResponse = await api.get(`/invoices/student/${match.studentNumber}`);
+        setStudentInvoices(invResponse.data.data || []);
       } else {
         setError("Siswa dengan Nomor Induk tersebut tidak ditemukan");
       }
@@ -226,7 +257,7 @@ export default function PaymentsPage() {
     try {
       const payload = {
         studentNumber: foundStudent.studentNumber,
-        month: selectedMonth,
+        month: invoiceType === "SPP" || invoiceType === "FULLDAY" ? selectedMonth : 7,
         year: selectedYear,
         invoiceType,
         paymentAmount: Number(paymentAmount),
@@ -246,8 +277,9 @@ export default function PaymentsPage() {
       setReceiptData(invData);
       setShowReceiptModal(true);
       
-      // Refresh invoices for current selected year
-      fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
+      // Refresh invoices
+      const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
+      setStudentInvoices(invResponse.data.data || []);
     } catch (err: any) {
       setError(err.response?.data?.message || "Gagal memproses pembayaran");
     } finally {
@@ -267,32 +299,57 @@ export default function PaymentsPage() {
     }).format(value);
   };
 
-  const handlePrintReceipt = () => {
-    if (!foundStudent || !receiptData) return;
-    const mockInvoice: DBInvoice = {
-      id: receiptData.id,
-      studentId: foundStudent.id,
-      invoiceType: receiptData.invoiceType,
-      month: receiptData.month,
-      year: receiptData.year,
-      baseAmount: receiptData.amount,
-      discountApplied: 0,
-      amount: receiptData.amount,
-      status: "PAID",
-      transactions: [{
-        id: Date.now(),
-        amount: receiptData.amount,
-        date: new Date().toISOString(),
-        paymentMethod: "CASH"
-      }]
-    };
-    handlePrintReceiptForInvoice(mockInvoice);
+  const openPrintSelectionModal = (targetInv?: DBInvoice) => {
+    if (!foundStudent || studentInvoices.length === 0) return;
+    let initialKeys: string[] = [];
+    if (targetInv) {
+      const targetKey = `${targetInv.invoiceType}-${targetInv.month}-${targetInv.year}`;
+      initialKeys.push(targetKey);
+      for (const inv of studentInvoices) {
+        const k = `${inv.invoiceType}-${inv.month}-${inv.year}`;
+        if (!initialKeys.includes(k) && initialKeys.length < 4) {
+          initialKeys.push(k);
+        }
+      }
+    } else {
+      initialKeys = studentInvoices.slice(0, 4).map((i) => `${i.invoiceType}-${i.month}-${i.year}`);
+    }
+    setSelectedForPrintKeys(initialKeys);
+    setIsPrintModalOpen(true);
   };
 
-  const handlePrintReceiptForInvoice = (inv: DBInvoice) => {
+  const handlePrintReceipt = () => {
+    if (!foundStudent) return;
+    openPrintSelectionModal();
+  };
+
+  const handlePrintReceiptForInvoice = (inv?: DBInvoice, customInvoices?: DBInvoice[]) => {
     if (!foundStudent) return;
 
-    const tx = inv.transactions && inv.transactions.length > 0 ? inv.transactions[0] : null;
+    let selectedFourInvoices: DBInvoice[] = [];
+    if (customInvoices && customInvoices.length > 0) {
+      selectedFourInvoices = customInvoices.slice(0, 4);
+    } else if (inv) {
+      const currentMonth = inv.month || 7;
+      const sameTypeInvoices = studentInvoices.filter(
+        (i) => i.invoiceType === inv.invoiceType && i.year === inv.year
+      );
+      const idx = sameTypeInvoices.findIndex((i) => i.month === currentMonth);
+      if (idx !== -1) {
+        const startIdx = Math.max(0, Math.min(idx, sameTypeInvoices.length - 4));
+        selectedFourInvoices = sameTypeInvoices.slice(startIdx, startIdx + 4);
+      }
+      if (selectedFourInvoices.length === 0) {
+        selectedFourInvoices = [inv];
+      }
+    }
+    if (selectedFourInvoices.length === 0 && studentInvoices.length > 0) {
+      selectedFourInvoices = studentInvoices.slice(0, 4);
+    }
+
+    const tx = selectedFourInvoices[0]?.transactions && selectedFourInvoices[0].transactions.length > 0
+      ? selectedFourInvoices[0].transactions[0]
+      : null;
     const dateStr = tx ? new Date(tx.date).toLocaleDateString("id-ID", {
       day: "numeric",
       month: "long",
@@ -304,8 +361,6 @@ export default function PaymentsPage() {
       month: "long",
       year: "numeric"
     });
-
-    const amountText = formatRupiah(inv.amount);
 
     const terbilangFunc = (num: number): string => {
       const ones = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
@@ -320,220 +375,290 @@ export default function PaymentsPage() {
       return "";
     };
 
-    const terbilangStr = terbilangFunc(inv.amount) ? terbilangFunc(inv.amount) + " Rupiah" : "Nol Rupiah";
-    const rawMethod = tx ? tx.paymentMethod : "CASH";
-    const displayMethod = rawMethod.toUpperCase() === "MIDTRANS" ? "QRIS" : rawMethod;
-
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
+
+    // Render 4 receipt slots on A4 page
+    const slotsHtml = Array.from({ length: 4 }).map((_, slotIdx) => {
+      const itemInv = selectedFourInvoices[slotIdx];
+      if (!itemInv) {
+        return `
+          <div class="receipt-slot empty-slot">
+            <div class="empty-slot-text">
+              <span>Potongan Kertas A4 (Kosong)</span>
+            </div>
+          </div>
+        `;
+      }
+
+      const itemTx = itemInv.transactions && itemInv.transactions.length > 0 ? itemInv.transactions[itemInv.transactions.length - 1] : null;
+      const itemAmountText = formatRupiah(itemInv.amount);
+      const itemTerbilang = terbilangFunc(itemInv.amount) ? terbilangFunc(itemInv.amount) + " Rupiah" : "Nol Rupiah";
+      const itemMethod = itemTx?.paymentMethod ? (itemTx.paymentMethod.toUpperCase() === "MIDTRANS" ? "QRIS" : itemTx.paymentMethod) : "CASH";
+      const itemDateStr = itemTx?.date
+        ? new Date(itemTx.date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
+        : dateStr.split(" pukul ")[0];
+
+      const periodDesc = itemInv.invoiceType === "SPP" || itemInv.invoiceType === "FULLDAY"
+        ? `${getInvoiceTypeName(itemInv.invoiceType)} - Bulan ${MONTHS.find((m) => m.value === itemInv.month)?.name} ${itemInv.year}`
+        : `${getInvoiceTypeName(itemInv.invoiceType)} - Tahun ${itemInv.year}`;
+
+      return `
+        <div class="receipt-slot">
+          <div class="stamp">LUNAS</div>
+          <div class="header">
+            <div>
+              <div class="school-title">Yayasan Al Uswah Terpadu</div>
+              <div class="school-sub">SIKUAT Keuangan Sekolah</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="kw-no">KW-${itemInv.id || 'NEW'}-${foundStudent.studentNumber}</div>
+              <div class="kw-date">${itemDateStr}</div>
+            </div>
+          </div>
+
+          <div class="title-banner">KWITANSI PEMBAYARAN</div>
+
+          <div class="row-data">
+            <div class="label">Telah Diterima Dari</div>
+            <div class="value" style="font-weight: 700;">${foundStudent.parent.name} (Wali ${foundStudent.name})</div>
+          </div>
+
+          <div class="row-data">
+            <div class="label">Nama Siswa / NIS</div>
+            <div class="value" style="font-weight: 600;">${foundStudent.name} (NIS: ${foundStudent.studentNumber})</div>
+          </div>
+
+          <div class="row-data">
+            <div class="label">Kelas / Unit</div>
+            <div class="value">Kelas ${foundStudent.className} / Unit ${SCHOOL_UNITS.find(u => u.id === foundStudent.schoolUnitId)?.name || 'SD'}</div>
+          </div>
+
+          <div class="row-data">
+            <div class="label">Untuk Pembayaran</div>
+            <div class="value" style="font-weight: 600;">${periodDesc}</div>
+          </div>
+
+          <div class="row-data">
+            <div class="label">Metode Pembayaran</div>
+            <div class="value">
+              <span class="badge-method">${itemMethod}</span>
+            </div>
+          </div>
+
+          <div class="row-data">
+            <div class="label">Jumlah Uang</div>
+            <div class="value" style="font-size: 11px; font-weight: 800; color: #1e3a8a;">${itemAmountText}</div>
+          </div>
+
+          <div class="terbilang-box">
+            Terbilang: ${itemTerbilang}
+          </div>
+
+          <div class="footer-receipt">
+            <div class="signature">
+              <div class="sig-title">Pembayar</div>
+              <div class="sig-name">${foundStudent.parent.name}</div>
+            </div>
+            <div class="signature">
+              <div class="sig-title">Petugas Kasir</div>
+              <div class="sig-name">${user?.name || "Admin Kasir"}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
 
     printWindow.document.write(`
       <html>
         <head>
-          <title>Kwitansi Pembayaran SIKUAT - ${foundStudent.name}</title>
+          <title>Kwitansi Pembayaran A4 (4-in-1) - ${foundStudent.name}</title>
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Inter:wght@400;600;850&display=swap');
-            body {
-              font-family: 'Inter', sans-serif;
-              color: #1e293b;
-              margin: 0;
-              padding: 40px;
-              background: #fff;
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;850&display=swap');
+            @page {
+              size: A4 portrait;
+              margin: 3mm;
             }
-            .receipt-border {
-              border: 2px solid #0f172a;
-              padding: 30px;
-              max-width: 750px;
-              margin: 0 auto;
-              position: relative;
-              border-radius: 12px;
-              box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
-              background-color: #fff;
-              background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='150' height='150' viewBox='0 0 150 150'><text fill='%23e2e8f0' font-size='13' font-family='sans-serif' font-weight='900' x='75' y='75' transform='rotate(-30 75 75)' text-anchor='middle'>SIKUAT</text></svg>");
-              background-repeat: repeat;
+            * {
+              box-sizing: border-box;
+            }
+            html, body {
+              height: 100%;
+              margin: 0;
+              padding: 0;
+              overflow: hidden;
+              font-family: 'Inter', sans-serif;
+              color: #0f172a;
+              background: #fff;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
+            }
+            .a4-grid {
+              width: 200mm;
+              height: 280mm;
+              max-height: 280mm;
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              grid-template-rows: 1fr 1fr;
+              gap: 4mm;
+              margin: 0 auto;
+              page-break-after: avoid;
+              page-break-inside: avoid;
+            }
+            .receipt-slot {
+              border: 1px dashed #64748b;
+              border-radius: 6px;
+              padding: 6px 8px;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              position: relative;
+              background: #ffffff;
+              height: 136mm;
+              max-height: 136mm;
+              overflow: hidden;
+            }
+            .empty-slot {
+              border: 1px dashed #cbd5e1;
+              background: #fafafa;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+            .empty-slot-text {
+              font-size: 9px;
+              font-weight: 600;
+              color: #94a3b8;
+              text-transform: uppercase;
+              letter-spacing: 1px;
             }
             .header {
               display: flex;
               justify-content: space-between;
-              align-items: center;
-              border-bottom: 2px solid #e2e8f0;
-              padding-bottom: 20px;
-              margin-bottom: 25px;
+              align-items: flex-start;
+              border-bottom: 1.5px solid #cbd5e1;
+              padding-bottom: 4px;
+              margin-bottom: 4px;
             }
             .school-title {
-              font-size: 18px;
+              font-size: 10px;
               font-weight: 850;
               text-transform: uppercase;
-              letter-spacing: 0.5px;
               color: #0f172a;
+              line-height: 1.2;
             }
             .school-sub {
-              font-size: 11px;
+              font-size: 7.5px;
               color: #64748b;
-              margin-top: 4px;
+              margin-top: 1px;
             }
-            .receipt-title {
-              font-size: 20px;
-              font-weight: 850;
+            .kw-no {
+              font-size: 8px;
+              font-weight: 700;
+              color: #0f172a;
+              text-align: right;
+            }
+            .kw-date {
+              font-size: 7.5px;
+              color: #64748b;
+              text-align: right;
+            }
+            .title-banner {
               text-align: center;
-              letter-spacing: 1px;
-              margin-bottom: 30px;
-              text-transform: uppercase;
+              font-size: 10px;
+              font-weight: 850;
               color: #1e3a8a;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              margin: 2px 0 6px 0;
             }
             .row-data {
               display: flex;
-              margin-bottom: 18px;
-              font-size: 13px;
-              line-height: 1.6;
+              margin-bottom: 4px;
+              font-size: 8.5px;
+              line-height: 1.3;
             }
             .label {
-              width: 180px;
+              width: 95px;
               font-weight: 600;
               color: #475569;
+              flex-shrink: 0;
             }
             .value {
               flex: 1;
               border-bottom: 1px dashed #cbd5e1;
-              padding-bottom: 2px;
+              padding-bottom: 1px;
               color: #0f172a;
             }
             .terbilang-box {
               background: #f8fafc;
               border: 1px solid #e2e8f0;
-              padding: 12px 15px;
-              border-radius: 8px;
+              padding: 3px 6px;
+              border-radius: 4px;
               font-style: italic;
               font-weight: 600;
-              color: #0f172a;
-              margin: 25px 0;
-              font-size: 12px;
-            }
-            .footer-receipt {
-              display: flex;
-              justify-content: space-between;
-              margin-top: 50px;
-            }
-            .signature {
-              text-align: center;
-              width: 220px;
-            }
-            .signature-space {
-              height: 60px;
-            }
-            .signature-name {
-              font-weight: 700;
-              border-top: 1px solid #94a3b8;
-              padding-top: 6px;
-              font-size: 12px;
-              color: #0f172a;
+              font-size: 7.5px;
+              color: #334155;
+              margin: 2px 0;
             }
             .badge-method {
               display: inline-block;
               background: #e0f2fe;
               color: #0369a1;
               border: 1px solid #bae6fd;
-              padding: 3px 8px;
+              padding: 1px 4px;
               font-weight: 700;
-              font-size: 10px;
-              border-radius: 4px;
+              font-size: 7.5px;
+              border-radius: 3px;
               text-transform: uppercase;
             }
             .stamp {
               position: absolute;
-              bottom: 150px;
-              left: 55%;
-              transform: translateX(-50%) rotate(-7deg);
-              border: 3px solid #10b981;
+              bottom: 40px;
+              right: 12px;
+              transform: rotate(-6deg);
+              border: 2px solid #10b981;
               color: #10b981;
-              font-size: 13px;
+              font-size: 8.5px;
               font-weight: 900;
-              padding: 8px 16px;
+              padding: 2px 6px;
               text-transform: uppercase;
-              border-radius: 8px;
-              letter-spacing: 2px;
-              opacity: 0.8;
+              border-radius: 4px;
+              letter-spacing: 1px;
+              opacity: 0.85;
+            }
+            .footer-receipt {
+              display: flex;
+              justify-content: space-between;
+              margin-top: 6px;
+              padding-top: 2px;
+            }
+            .signature {
+              text-align: center;
+              width: 80px;
+            }
+            .sig-title {
+              font-size: 7.5px;
+              color: #64748b;
+              margin-bottom: 20px;
+            }
+            .sig-name {
+              font-weight: 700;
+              border-top: 1px solid #94a3b8;
+              padding-top: 2px;
+              font-size: 7.5px;
+              color: #0f172a;
             }
             @media print {
               body {
                 padding: 0;
               }
-              .no-print {
-                display: none;
-              }
             }
           </style>
         </head>
         <body>
-          <div class="receipt-border">
-            <div class="stamp">LUNAS / PAID</div>
-            <div class="header">
-              <div>
-                <div class="school-title">Yayasan Al Uswah Terpadu</div>
-                <div class="school-sub">Sistem Informasi Keuangan Terpadu (SIKUAT)</div>
-              </div>
-              <div style="text-align: right;">
-                <div style="font-size: 11px; font-weight: 700; color: #0f172a;">No. Kwitansi: KW-${inv.id || 'NEW'}-${foundStudent.studentNumber}</div>
-                <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Tanggal: ${dateStr.split(" pukul ")[0]}</div>
-              </div>
-            </div>
-            
-            <div class="receipt-title">Kwitansi Pembayaran SPP</div>
-
-            <div class="row-data">
-              <div class="label">Telah Diterima Dari</div>
-              <div class="value" style="font-weight: 700;">${foundStudent.parent.name} (Wali ${foundStudent.name})</div>
-            </div>
-
-            <div class="row-data">
-              <div class="label">Nama Siswa / NIS</div>
-              <div class="value" style="font-weight: 600;">${foundStudent.name} (NIS: ${foundStudent.studentNumber})</div>
-            </div>
-
-            <div class="row-data">
-              <div class="label">Kelas / Unit</div>
-              <div class="value">Kelas ${foundStudent.className} / Unit ${SCHOOL_UNITS.find(u => u.id === foundStudent.schoolUnitId)?.name || 'SD'}</div>
-            </div>
-
-            <div class="row-data">
-              <div class="label">Untuk Pembayaran</div>
-              <div class="value" style="font-weight: 600;">
-                ${inv.invoiceType === "SPP" ? `SPP Bulanan - Bulan ${MONTHS.find(m => m.value === inv.month)?.name} ${inv.year}` : `Uang Pengembangan - Tahun ${inv.year}`}
-              </div>
-            </div>
-
-            <div class="row-data">
-              <div class="label">Metode Pembayaran</div>
-              <div class="value">
-                <span class="badge-method">${displayMethod}</span>
-                ${tx && tx.amount ? `<span style="margin-left: 10px; font-size: 11px; color: #64748b;">(Pembayaran loket)</span>` : ""}
-              </div>
-            </div>
-
-            <div class="row-data">
-              <div class="label">Jumlah Uang</div>
-              <div class="value" style="font-size: 15px; font-weight: 800; color: #1e3a8a;">${amountText}</div>
-            </div>
-
-            <div class="terbilang-box">
-              Terbilang: ${terbilangStr}
-            </div>
-
-            <div class="footer-receipt">
-              <div class="signature">
-                <div style="font-size: 11px; color: #64748b; margin-bottom: 40px;">Wali Murid / Pembayar</div>
-                <div class="signature-space"></div>
-                <div class="signature-name">${foundStudent.parent.name}</div>
-              </div>
-              
-              <div class="signature">
-                <div style="font-size: 11px; color: #64748b; margin-bottom: 40px;">Petugas Administrasi</div>
-                <div class="signature-space"></div>
-                <div class="signature-name">${user?.name || "Admin Kasir"}</div>
-              </div>
-            </div>
+          <div class="a4-grid">
+            ${slotsHtml}
           </div>
           
           <script>
@@ -560,38 +685,20 @@ export default function PaymentsPage() {
       (i) => i.month === selectedMonth && i.year === selectedYear && i.invoiceType === "SPP"
     );
     if (!inv) return { status: "PENDING", alreadyPaid: 0, remaining: getEstimatedAmount() };
-    const paid = inv.transactions && inv.transactions.length > 0 
-      ? inv.transactions.reduce((sum, tx) => sum + tx.amount, 0)
-      : (inv.status === "PAID" ? inv.amount : 0);
+    const paid = (inv.transactions || []).reduce((sum, tx) => sum + tx.amount, 0);
     return {
       status: inv.status,
       alreadyPaid: paid,
-      remaining: Math.max(0, inv.amount - paid),
-      invoice: inv
-    };
-  };
-
-  // Check development fund details
-  const getDevFundDetails = () => {
-    const inv = studentInvoices.find((i) => i.invoiceType === "UANG_PENGEMBANGAN");
-    if (!inv) return { status: "PENDING", total: 2000000, alreadyPaid: 0, remaining: 2000000 };
-    const paid = inv.transactions && inv.transactions.length > 0 
-      ? inv.transactions.reduce((sum, tx) => sum + tx.amount, 0)
-      : (inv.status === "PAID" ? inv.amount : 0);
-    return {
-      status: inv.status,
-      total: inv.amount,
-      alreadyPaid: paid,
-      remaining: Math.max(0, inv.amount - paid),
+      remaining: inv.amount - paid,
       invoice: inv
     };
   };
 
   const sppInfo = getSelectedSPPDetails();
-  const devInfo = getDevFundDetails();
+  const nonSppInfo = getNonSppDetails(invoiceType);
 
   const isCurrentSPPPaid = sppInfo.status === "PAID";
-  const isDevFundPaid = devInfo.status === "PAID";
+  const isNonSppPaid = nonSppInfo.status === "PAID";
 
   const getWhatsAppReceiptLink = () => {
     if (!foundStudent || !receiptData) return "#";
@@ -601,7 +708,7 @@ export default function PaymentsPage() {
     
     const periodStr = receiptData.invoiceType === "SPP" 
       ? `Bulan ${MONTHS.find(m => m.value === receiptData.month)?.name} ${receiptData.year}`
-      : `Uang Pengembangan ${receiptData.year}`;
+      : `${getInvoiceTypeName(receiptData.invoiceType)} ${receiptData.year}`;
       
     const message = `*KWITANSI BUKTI PEMBAYARAN RESMI*\n` +
       `*SIKUAT - Yayasan Al Uswah Terpadu*\n\n` +
@@ -611,7 +718,7 @@ export default function PaymentsPage() {
       `- *Nama Siswa:* ${foundStudent.name}\n` +
       `- *NIS:* ${foundStudent.studentNumber}\n` +
       `- *Unit/Kelas:* ${getUnitName(foundStudent.schoolUnitId)} - ${foundStudent.className}\n` +
-      `- *Pembayaran:* ${receiptData.invoiceType} (${periodStr})\n` +
+      `- *Pembayaran:* ${getInvoiceTypeName(receiptData.invoiceType)} (${periodStr})\n` +
       `- *Nominal Dibayar:* ${formatRupiah(Number(paymentAmount))}\n` +
       `- *Status:* ${receiptData.status === "PAID" ? "LUNAS" : "TERBAYAR SEBAGIAN"}\n` +
       `- *Tanggal:* ${new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}\n\n` +
@@ -765,15 +872,20 @@ export default function PaymentsPage() {
                   <select
                     value={invoiceType}
                     onChange={(e) => setInvoiceType(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer"
                   >
                     <option value="SPP">SPP Bulanan (SPP)</option>
+                    <option value="FULLDAY">Biaya Fullday Bulanan (KB & RA)</option>
                     <option value="UANG_PENGEMBANGAN">Cicilan Uang Pengembangan</option>
+                    <option value="UANG_PERALATAN">Uang Peralatan</option>
+                    <option value="EKSTRAKURIKULER">Uang Ekstrakurikuler (Ekskul)</option>
+                    <option value="DAFTAR_ULANG">Uang Daftar Ulang</option>
+                    <option value="SERAGAM">Uang Seragam</option>
                   </select>
                 </div>
 
-                {/* Select Month and Year for SPP */}
-                {invoiceType === "SPP" ? (
+                {/* Select Month and Year for SPP or FULLDAY */}
+                {invoiceType === "SPP" || invoiceType === "FULLDAY" ? (
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <label className="font-semibold text-slate-300">Bulan SPP</label>
@@ -804,7 +916,7 @@ export default function PaymentsPage() {
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-slate-300">Tahun Uang Pengembangan</label>
+                    <label className="font-semibold text-slate-300">Tahun Periode/Angkatan</label>
                     <input
                       type="number"
                       min="2000"
@@ -853,25 +965,47 @@ export default function PaymentsPage() {
                     </>
                   ) : (
                     <>
+                      {invoiceType === "EKSTRAKURIKULER" && foundStudent.schoolUnitId === 3 && foundStudent.sdExtracurriculars && foundStudent.sdExtracurriculars.length > 0 && (
+                        <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-950 mb-2.5 space-y-1">
+                          <p className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wide">Daftar Eskul SD Pilihan:</p>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {foundStudent.sdExtracurriculars.map((e: any) => (
+                              <span key={e.id} className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-violet-650/10 text-violet-400 border border-violet-500/20">
+                                {e.name} ({formatRupiah(e.fee)})
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <div className="flex justify-between items-center">
-                        <span className="text-slate-400">Status Uang Pengembangan</span>
+                        <span className="text-slate-400">Status {getInvoiceTypeName(invoiceType)}</span>
                         <span className={`font-bold ${
-                          devInfo.status === "PAID"
+                          nonSppInfo.status === "PAID"
                             ? "text-emerald-400"
-                            : devInfo.status === "PARTIALLY_PAID"
+                            : nonSppInfo.status === "PARTIALLY_PAID"
                             ? "text-amber-400"
                             : "text-red-400"
                         }`}>
-                          {devInfo.status === "PAID" ? "Lunas" : devInfo.status === "PARTIALLY_PAID" ? "Tercicil" : "Belum Dibayar"}
+                          {nonSppInfo.status === "PAID" ? "Lunas" : nonSppInfo.status === "PARTIALLY_PAID" ? "Tercicil" : "Belum Dibayar"}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
+                        <span className="text-slate-400">Tarif Dasar</span>
+                        <span className="text-slate-200 font-mono">{formatRupiah(nonSppInfo.baseAmount)}</span>
+                      </div>
+                      {nonSppInfo.discountApplied > 0 && (
+                        <div className="flex justify-between items-center text-amber-400 font-semibold">
+                          <span>Potongan Diskon</span>
+                          <span className="font-mono">-{formatRupiah(nonSppInfo.discountApplied)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center">
                         <span className="text-slate-400">Sudah Dibayar</span>
-                        <span className="text-slate-200 font-mono">{formatRupiah(devInfo.alreadyPaid)}</span>
+                        <span className="text-slate-200 font-mono">{formatRupiah(nonSppInfo.alreadyPaid)}</span>
                       </div>
                       <div className="border-t border-slate-900 pt-2 flex justify-between items-center text-xs font-bold">
-                        <span className="text-white">Sisa Tagihan Uang Pengembangan</span>
-                        <span className="text-amber-400 font-mono">{formatRupiah(devInfo.remaining)}</span>
+                        <span className="text-white">Sisa Tagihan {getInvoiceTypeName(invoiceType)}</span>
+                        <span className="text-amber-400 font-mono">{formatRupiah(nonSppInfo.remaining)}</span>
                       </div>
                     </>
                   )}
@@ -897,7 +1031,7 @@ export default function PaymentsPage() {
                   type="submit"
                   disabled={
                     submitLoading ||
-                    (invoiceType === "SPP" ? (!matchingTariff || sppInfo.status === "PAID") : devInfo.status === "PAID") ||
+                    (invoiceType === "SPP" ? (!matchingTariff || sppInfo.status === "PAID") : nonSppInfo.status === "PAID") ||
                     !paymentAmount || Number(paymentAmount) <= 0
                   }
                   className="w-full py-3 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer mt-4"
@@ -909,7 +1043,7 @@ export default function PaymentsPage() {
                       <span>
                         {invoiceType === "SPP" 
                           ? (sppInfo.status === "PAID" ? "Tagihan SPP Sudah Lunas" : "Proses Pembayaran Tunai") 
-                          : (devInfo.status === "PAID" ? "Uang Pengembangan Sudah Lunas" : "Proses Bayar Cicilan")}
+                          : (nonSppInfo.status === "PAID" ? `${getInvoiceTypeName(invoiceType)} Sudah Lunas` : "Proses Pembayaran")}
                       </span>
                       <ArrowRight className="w-4 h-4" />
                     </>
@@ -1063,7 +1197,7 @@ export default function PaymentsPage() {
                     return (
                       <tr key={`${inv.invoiceType}-${inv.month}-${inv.year}`} className="hover:bg-slate-800/10">
                         <td className="px-4 py-3 font-semibold text-white">
-                          {inv.invoiceType === "SPP" ? "SPP Bulanan" : "Uang Pengembangan"}
+                          {getInvoiceTypeName(inv.invoiceType)}
                         </td>
                         <td className="px-4 py-3">
                           {inv.invoiceType === "SPP" ? `${MONTHS.find(m => m.value === inv.month)?.name} ${inv.year}` : `Tahun ${inv.year}`}
@@ -1101,8 +1235,9 @@ export default function PaymentsPage() {
                                           paymentAmount: inv.amount,
                                         });
                                       }
-                                      // Refresh student invoices for selected year
-                                      fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
+                                      // Refresh student invoices
+                                      const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
+                                      setStudentInvoices(invResponse.data.data || []);
                                       setSuccessMsg("Status pembayaran berhasil diubah menjadi Lunas!");
                                     } catch (err: any) {
                                       alert(err.response?.data?.message || "Gagal mengubah status");
@@ -1116,9 +1251,9 @@ export default function PaymentsPage() {
                             ) : (
                               <>
                                 <button
-                                  onClick={() => handlePrintReceiptForInvoice(inv)}
+                                  onClick={() => openPrintSelectionModal(inv)}
                                   className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer flex items-center gap-1 inline-flex"
-                                  title="Cetak kwitansi pembayaran"
+                                  title="Pilih dan cetak kwitansi A4"
                                 >
                                   <Printer className="w-3 h-3" /> Kwitansi
                                 </button>
@@ -1127,7 +1262,8 @@ export default function PaymentsPage() {
                                     if (confirm(`Apakah Anda yakin ingin membatalkan pelunasan tagihan ini (Set Belum Lunas)? Semua riwayat transaksi kasir untuk tagihan ini akan terhapus.`)) {
                                       try {
                                         await api.put(`/invoices/${inv.id}/status`, { status: "PENDING" });
-                                        fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
+                                        const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
+                                        setStudentInvoices(invResponse.data.data || []);
                                         setSuccessMsg("Status pembayaran berhasil diubah menjadi Belum Lunas!");
                                       } catch (err: any) {
                                         alert(err.response?.data?.message || "Gagal mengubah status");
@@ -1143,7 +1279,8 @@ export default function PaymentsPage() {
                                     if (confirm(`Apakah Anda yakin ingin MENGHAPUS data tagihan beserta riwayat transaksinya dari database? Tindakan ini tidak dapat dibatalkan.`)) {
                                       try {
                                         await api.delete(`/invoices/${inv.id}`);
-                                        fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
+                                        const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
+                                        setStudentInvoices(invResponse.data.data || []);
                                         setSuccessMsg("Data tagihan berhasil dihapus sepenuhnya!");
                                       } catch (err: any) {
                                         alert(err.response?.data?.message || "Gagal menghapus tagihan");
@@ -1331,6 +1468,104 @@ export default function PaymentsPage() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal Selection Kwitansi A4 */}
+      {isPrintModalOpen && foundStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in text-xs">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl relative space-y-4">
+            <button
+              onClick={() => setIsPrintModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <Printer className="w-5 h-5 text-indigo-400" />
+              Pilih Kwitansi untuk Cetak A4 (Maksimal 4)
+            </h2>
+            <p className="text-xs text-slate-400">
+              Centang hingga 4 tagihan/bulan milik <b>{foundStudent.name}</b> yang ingin dicetak bersama dalam 1 lembar kertas A4:
+            </p>
+
+            <div className="max-h-60 overflow-y-auto space-y-2 border border-slate-800 p-3 rounded-xl bg-slate-950">
+              {studentInvoices.map((inv) => {
+                const key = `${inv.invoiceType}-${inv.month}-${inv.year}`;
+                const isChecked = selectedForPrintKeys.includes(key);
+                return (
+                  <label
+                    key={key}
+                    className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                      isChecked
+                        ? "bg-indigo-600/15 border-indigo-500/50 text-indigo-200"
+                        : "bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          if (isChecked) {
+                            setSelectedForPrintKeys(selectedForPrintKeys.filter((k) => k !== key));
+                          } else {
+                            if (selectedForPrintKeys.length >= 4) {
+                              alert("Maksimal 4 kwitansi dalam 1 lembar kertas A4");
+                              return;
+                            }
+                            setSelectedForPrintKeys([...selectedForPrintKeys, key]);
+                          }
+                        }}
+                        className="w-4 h-4 accent-indigo-500 rounded cursor-pointer"
+                      />
+                      <div>
+                        <p className="font-bold text-white">
+                          {getInvoiceTypeName(inv.invoiceType)} - {inv.invoiceType === "SPP" || inv.invoiceType === "FULLDAY" ? `${MONTHS.find(m => m.value === inv.month)?.name} ${inv.year}` : `Tahun ${inv.year}`}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-mono">
+                          Nominal: {formatRupiah(inv.amount)} | Status: <span className={inv.status === "PAID" ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>{inv.status === "PAID" ? "LUNAS" : "BELUM LUNAS"}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+              <span className="text-xs text-indigo-400 font-semibold">
+                {selectedForPrintKeys.length} / 4 kwitansi terpilih
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg transition-all text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedForPrintKeys.length === 0) {
+                      alert("Pilih minimal 1 kwitansi untuk dicetak");
+                      return;
+                    }
+                    const targetInvs = studentInvoices.filter((i) =>
+                      selectedForPrintKeys.includes(`${i.invoiceType}-${i.month}-${i.year}`)
+                    );
+                    setIsPrintModalOpen(false);
+                    handlePrintReceiptForInvoice(targetInvs[0], targetInvs);
+                  }}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition-all text-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Printer className="w-4 h-4" /> Cetak Lembar A4 ({selectedForPrintKeys.length})
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
