@@ -164,6 +164,23 @@ export default function PaymentsPage() {
     }
   }, [foundStudent, tariffs, invoiceType]);
 
+  // Helper to fetch student invoices for specific year
+  const fetchStudentInvoices = async (studentNum: string, year: number) => {
+    try {
+      const invResponse = await api.get(`/invoices/student/${studentNum}?year=${year}`);
+      setStudentInvoices(invResponse.data.allInvoices || []);
+    } catch (err) {
+      console.error("Gagal mengambil data invoice siswa", err);
+    }
+  };
+
+  // Auto re-fetch invoices when selected year changes or student changes
+  useEffect(() => {
+    if (foundStudent) {
+      fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
+    }
+  }, [foundStudent, selectedYear]);
+
   const handleSearchStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nisQuery.trim()) return;
@@ -185,9 +202,8 @@ export default function PaymentsPage() {
 
       if (match) {
         setFoundStudent(match);
-        // Fetch existing invoices for student
-        const invResponse = await api.get(`/invoices/student/${match.studentNumber}`);
-        setStudentInvoices(invResponse.data.allInvoices || []);
+        // Fetch existing invoices for student for selected year
+        fetchStudentInvoices(match.studentNumber, selectedYear);
       } else {
         setError("Siswa dengan Nomor Induk tersebut tidak ditemukan");
       }
@@ -230,9 +246,8 @@ export default function PaymentsPage() {
       setReceiptData(invData);
       setShowReceiptModal(true);
       
-      // Refresh invoices
-      const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
-      setStudentInvoices(invResponse.data.allInvoices || []);
+      // Refresh invoices for current selected year
+      fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
     } catch (err: any) {
       setError(err.response?.data?.message || "Gagal memproses pembayaran");
     } finally {
@@ -545,11 +560,13 @@ export default function PaymentsPage() {
       (i) => i.month === selectedMonth && i.year === selectedYear && i.invoiceType === "SPP"
     );
     if (!inv) return { status: "PENDING", alreadyPaid: 0, remaining: getEstimatedAmount() };
-    const paid = inv.transactions.reduce((sum, tx) => sum + tx.amount, 0);
+    const paid = inv.transactions && inv.transactions.length > 0 
+      ? inv.transactions.reduce((sum, tx) => sum + tx.amount, 0)
+      : (inv.status === "PAID" ? inv.amount : 0);
     return {
       status: inv.status,
       alreadyPaid: paid,
-      remaining: inv.amount - paid,
+      remaining: Math.max(0, inv.amount - paid),
       invoice: inv
     };
   };
@@ -558,12 +575,14 @@ export default function PaymentsPage() {
   const getDevFundDetails = () => {
     const inv = studentInvoices.find((i) => i.invoiceType === "UANG_PENGEMBANGAN");
     if (!inv) return { status: "PENDING", total: 2000000, alreadyPaid: 0, remaining: 2000000 };
-    const paid = inv.transactions.reduce((sum, tx) => sum + tx.amount, 0);
+    const paid = inv.transactions && inv.transactions.length > 0 
+      ? inv.transactions.reduce((sum, tx) => sum + tx.amount, 0)
+      : (inv.status === "PAID" ? inv.amount : 0);
     return {
       status: inv.status,
       total: inv.amount,
       alreadyPaid: paid,
-      remaining: inv.amount - paid,
+      remaining: Math.max(0, inv.amount - paid),
       invoice: inv
     };
   };
@@ -1082,9 +1101,8 @@ export default function PaymentsPage() {
                                           paymentAmount: inv.amount,
                                         });
                                       }
-                                      // Refresh student invoices
-                                      const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
-                                      setStudentInvoices(invResponse.data.allInvoices || []);
+                                      // Refresh student invoices for selected year
+                                      fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
                                       setSuccessMsg("Status pembayaran berhasil diubah menjadi Lunas!");
                                     } catch (err: any) {
                                       alert(err.response?.data?.message || "Gagal mengubah status");
@@ -1109,8 +1127,7 @@ export default function PaymentsPage() {
                                     if (confirm(`Apakah Anda yakin ingin membatalkan pelunasan tagihan ini (Set Belum Lunas)? Semua riwayat transaksi kasir untuk tagihan ini akan terhapus.`)) {
                                       try {
                                         await api.put(`/invoices/${inv.id}/status`, { status: "PENDING" });
-                                        const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
-                                        setStudentInvoices(invResponse.data.allInvoices || []);
+                                        fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
                                         setSuccessMsg("Status pembayaran berhasil diubah menjadi Belum Lunas!");
                                       } catch (err: any) {
                                         alert(err.response?.data?.message || "Gagal mengubah status");
@@ -1126,8 +1143,7 @@ export default function PaymentsPage() {
                                     if (confirm(`Apakah Anda yakin ingin MENGHAPUS data tagihan beserta riwayat transaksinya dari database? Tindakan ini tidak dapat dibatalkan.`)) {
                                       try {
                                         await api.delete(`/invoices/${inv.id}`);
-                                        const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
-                                        setStudentInvoices(invResponse.data.allInvoices || []);
+                                        fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
                                         setSuccessMsg("Data tagihan berhasil dihapus sepenuhnya!");
                                       } catch (err: any) {
                                         alert(err.response?.data?.message || "Gagal menghapus tagihan");

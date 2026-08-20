@@ -160,6 +160,19 @@ export default function CekTagihanPage() {
     }
   };
 
+  // Auto-refetch when selectedYear changes and student is searched
+  useEffect(() => {
+    if (student && studentNumber.trim()) {
+      api.get(`/invoices/student/${studentNumber.trim()}?year=${selectedYear}`)
+        .then((res) => {
+          if (res.data.success && res.data.data) {
+            setInvoices(res.data.data);
+          }
+        })
+        .catch((err) => console.error("Gagal update invoice per tahun", err));
+    }
+  }, [selectedYear]);
+
   const fetchPakasirTransaction = async (method: string, targetInvoices: Invoice[]) => {
     if (method === "tf_manual") {
       setPakasirData(null);
