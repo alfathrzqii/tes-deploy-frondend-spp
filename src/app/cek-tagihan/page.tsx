@@ -92,6 +92,8 @@ export default function CekTagihanPage() {
   const [pakasirLoading, setPakasirLoading] = useState(false);
   const [pakasirData, setPakasirData] = useState<any>(null);
   const [realVaNumber, setRealVaNumber] = useState("");
+  const [showMethodSelector, setShowMethodSelector] = useState(true);
+
 
   const formatRupiah = (value: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -228,8 +230,7 @@ export default function CekTagihanPage() {
     setProcessingPayment(false);
     setPakasirData(null);
     setRealVaNumber("");
-    setPaymentMethod("qris");
-    fetchPakasirTransaction("qris", [invoice]);
+    setShowMethodSelector(true);
   };
 
   const handleOpenSnapBatch = () => {
@@ -245,16 +246,17 @@ export default function CekTagihanPage() {
     setProcessingPayment(false);
     setPakasirData(null);
     setRealVaNumber("");
-    setPaymentMethod("qris");
-    fetchPakasirTransaction("qris", selected);
+    setShowMethodSelector(true);
   };
 
-  const handlePaymentMethodChange = (newMethod: "qris" | "bni_va" | "bri_va" | "cimb_niaga_va" | "tf_manual") => {
-    setPaymentMethod(newMethod);
-    if (selectedInvoicesList.length > 0) {
-      fetchPakasirTransaction(newMethod, selectedInvoicesList);
+  const handleSelectMethod = (method: "qris" | "bni_va" | "bri_va" | "cimb_niaga_va" | "tf_manual") => {
+    setPaymentMethod(method);
+    setShowMethodSelector(false);
+    if (method !== "tf_manual" && selectedInvoicesList.length > 0) {
+      fetchPakasirTransaction(method, selectedInvoicesList);
     }
   };
+
 
   const handleCheckStatusManual = async () => {
     if (!pakasirData) return;
@@ -425,8 +427,9 @@ export default function CekTagihanPage() {
       else if (inv.invoiceType === "UANG_PERALATAN") typeStr = "Uang Peralatan";
       else if (inv.invoiceType === "EKSTRAKURIKULER") typeStr = "Ekstrakurikuler";
       else if (inv.invoiceType === "SERAGAM") typeStr = "Seragam";
+      else if (inv.invoiceType === "FULLDAY") typeStr = "Uang Fullday";
 
-      const period = inv.invoiceType === "SPP" 
+      const period = (inv.invoiceType === "SPP" || inv.invoiceType === "FULLDAY")
         ? `${INDONESIAN_MONTHS[inv.month]} ${inv.year}`
         : "Pendaftaran Siswa Baru";
 
@@ -673,7 +676,7 @@ export default function CekTagihanPage() {
                           }`}
                         >
                           {invoice.invoiceType === "SPP"
-                            ? invoice.month
+                            ? "SP"
                             : invoice.invoiceType === "UANG_PENGEMBANGAN"
                             ? "UP"
                             : invoice.invoiceType === "DAFTAR_ULANG"
@@ -684,12 +687,16 @@ export default function CekTagihanPage() {
                             ? "EK"
                             : invoice.invoiceType === "SERAGAM"
                             ? "SG"
+                            : invoice.invoiceType === "FULLDAY"
+                            ? "FD"
                             : "LN"}
                         </div>
                         <div>
                           <h5 className="font-bold text-sm text-white">
                             {invoice.invoiceType === "SPP"
                               ? `SPP Bulan ${INDONESIAN_MONTHS[invoice.month]}`
+                              : invoice.invoiceType === "FULLDAY"
+                              ? `Program Fullday Bulan ${INDONESIAN_MONTHS[invoice.month]}`
                               : invoice.invoiceType === "UANG_PENGEMBANGAN"
                               ? "Uang Pengembangan"
                               : invoice.invoiceType === "DAFTAR_ULANG"
@@ -703,7 +710,7 @@ export default function CekTagihanPage() {
                               : "Tagihan Lainnya"}
                           </h5>
                           <span className="text-xs text-slate-400">
-                            {invoice.invoiceType === "SPP"
+                            {(invoice.invoiceType === "SPP" || invoice.invoiceType === "FULLDAY")
                               ? `Tahun ${invoice.year}`
                               : "Pendaftaran Siswa Baru"}
                           </span>
@@ -786,24 +793,24 @@ export default function CekTagihanPage() {
       {snapOpen && selectedInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
           {/* Snap Container */}
-          <div className="w-full max-w-md bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col relative animate-scaleUp">
+          <div className="w-full max-w-md bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col relative animate-scaleUp max-h-[92vh]">
             
             {/* Header: Midtrans Logo & Total */}
-            <div className="bg-slate-50 px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+            <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div>
-                <span className="text-[9px] uppercase font-bold tracking-widest text-slate-400 block mb-0.5">
+                <span className="text-[8px] uppercase font-bold tracking-widest text-slate-400 block mb-0.5">
                   GATEWAY PEMBAYARAN ONLINE
                 </span>
-                <h3 className="font-extrabold text-indigo-600 text-base flex items-center gap-1">
-                  SIKUAT <span className="text-slate-500 font-medium text-[11px] bg-slate-200/60 px-1.5 py-0.5 rounded ml-1">Pembayaran Resmi</span>
+                <h3 className="font-extrabold text-indigo-600 text-sm flex items-center gap-1">
+                  SIKUAT <span className="text-slate-500 font-medium text-[10px] bg-slate-200/60 px-1.5 py-0.5 rounded ml-1">Pembayaran Resmi</span>
                 </h3>
               </div>
               <button
                 onClick={() => setSnapOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
                 disabled={processingPayment}
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -841,6 +848,7 @@ export default function CekTagihanPage() {
                     {selectedInvoicesList.map((inv, idx) => {
                       let typeStr = inv.invoiceType;
                       if (inv.invoiceType === "SPP") typeStr = `SPP ${INDONESIAN_MONTHS[inv.month]}`;
+                      else if (inv.invoiceType === "FULLDAY") typeStr = `Uang Fullday ${INDONESIAN_MONTHS[inv.month]}`;
                       else if (inv.invoiceType === "UANG_PENGEMBANGAN") typeStr = "Uang Pengembangan";
                       else if (inv.invoiceType === "DAFTAR_ULANG") typeStr = "Daftar Ulang";
                       else if (inv.invoiceType === "UANG_PERALATAN") typeStr = "Uang Peralatan";
@@ -871,270 +879,285 @@ export default function CekTagihanPage() {
               </div>
             ) : (
               /* Checkout screens */
-              <div className="flex-1 flex flex-col">
-                {/* Total Billing Info */}
-                <div className="bg-indigo-50/70 px-6 py-4 flex flex-col border-b border-indigo-100">
-                  <span className="text-slate-500 font-semibold uppercase tracking-wider text-[9px]">
-                    Rincian Item Pembayaran ({selectedInvoicesList.length} Item)
-                  </span>
-                  <div className="max-h-[100px] overflow-y-auto mt-1 space-y-1.5">
-                    {selectedInvoicesList.map((inv, idx) => {
-                      let typeStr = inv.invoiceType;
-                      if (inv.invoiceType === "SPP") typeStr = `SPP ${INDONESIAN_MONTHS[inv.month]} ${inv.year}`;
-                      else if (inv.invoiceType === "UANG_PENGEMBANGAN") typeStr = "Uang Pengembangan";
-                      else if (inv.invoiceType === "DAFTAR_ULANG") typeStr = "Daftar Ulang";
-                      else if (inv.invoiceType === "UANG_PERALATAN") typeStr = "Uang Peralatan";
-                      else if (inv.invoiceType === "EKSTRAKURIKULER") typeStr = "Ekstrakurikuler";
-                      else if (inv.invoiceType === "SERAGAM") typeStr = "Seragam";
-
-                      return (
-                        <div key={idx} className="flex justify-between text-xs text-slate-700">
-                          <span className="font-medium">{typeStr}</span>
-                          <span className="font-bold text-slate-900">{formatRupiah(inv.amount)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex justify-between items-center border-t border-indigo-200/50 pt-2 mt-2">
-                    <span className="text-[10px] uppercase font-bold text-indigo-600">Total Tagihan</span>
-                    <span className="font-extrabold text-indigo-700 text-lg">
-                      {pakasirData ? formatRupiah(pakasirData.payment.total_payment) : formatRupiah(selectedInvoicesList.reduce((sum, inv) => sum + inv.amount, 0))}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Scrollable Area */}
+                <div className="flex-1 overflow-y-auto min-h-0">
+                  {/* Total Billing Info */}
+                  <div className="bg-indigo-50/70 px-5 py-3 flex flex-col border-b border-indigo-100 shrink-0">
+                    <span className="text-slate-500 font-semibold uppercase tracking-wider text-[8px]">
+                      Rincian Item Pembayaran ({selectedInvoicesList.length} Item)
                     </span>
-                  </div>
-                </div>
+                    <div className="max-h-[80px] overflow-y-auto mt-1 space-y-1">
+                      {selectedInvoicesList.map((inv, idx) => {
+                        let typeStr = inv.invoiceType;
+                        if (inv.invoiceType === "SPP") typeStr = `SPP ${INDONESIAN_MONTHS[inv.month]} ${inv.year}`;
+                        else if (inv.invoiceType === "FULLDAY") typeStr = `Uang Fullday ${INDONESIAN_MONTHS[inv.month]} ${inv.year}`;
+                        else if (inv.invoiceType === "UANG_PENGEMBANGAN") typeStr = "Uang Pengembangan";
+                        else if (inv.invoiceType === "DAFTAR_ULANG") typeStr = "Daftar Ulang";
+                        else if (inv.invoiceType === "UANG_PERALATAN") typeStr = "Uang Peralatan";
+                        else if (inv.invoiceType === "EKSTRAKURIKULER") typeStr = "Ekstrakurikuler";
+                        else if (inv.invoiceType === "SERAGAM") typeStr = "Seragam";
 
-                {/* Main panel - Methods */}
-                <div className="p-6 space-y-5">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Pilih Metode Pembayaran
-                  </p>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* QRIS */}
-                    <button
-                      onClick={() => handlePaymentMethodChange("qris")}
-                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
-                        paymentMethod === "qris"
-                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
-                          : "border-slate-100 hover:border-slate-300 text-slate-650 bg-slate-50/30"
-                      }`}
-                    >
-                      <QrCode className="w-5 h-5" />
-                      <span className="text-xs font-bold">QRIS (GoPay/SPay)</span>
-                    </button>
-
-                    {/* BNI VA */}
-                    <button
-                      onClick={() => handlePaymentMethodChange("bni_va")}
-                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
-                        paymentMethod === "bni_va"
-                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
-                          : "border-slate-100 hover:border-slate-300 text-slate-650 bg-slate-50/30"
-                      }`}
-                    >
-                      <Building2 className="w-5 h-5" />
-                      <span className="text-xs font-bold">BNI VA</span>
-                    </button>
-
-                    {/* BRI VA */}
-                    <button
-                      onClick={() => handlePaymentMethodChange("bri_va")}
-                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
-                        paymentMethod === "bri_va"
-                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
-                          : "border-slate-100 hover:border-slate-300 text-slate-650 bg-slate-50/30"
-                      }`}
-                    >
-                      <Building2 className="w-5 h-5" />
-                      <span className="text-xs font-bold">BRI VA</span>
-                    </button>
-
-                    {/* CIMB VA */}
-                    <button
-                      onClick={() => handlePaymentMethodChange("cimb_niaga_va")}
-                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
-                        paymentMethod === "cimb_niaga_va"
-                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
-                          : "border-slate-100 hover:border-slate-300 text-slate-650 bg-slate-50/30"
-                      }`}
-                    >
-                      <Building2 className="w-5 h-5" />
-                      <span className="text-xs font-bold">CIMB Niaga VA</span>
-                    </button>
-
-                    {/* Transfer Manual BSI */}
-                    <button
-                      onClick={() => handlePaymentMethodChange("tf_manual")}
-                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer col-span-2 ${
-                        paymentMethod === "tf_manual"
-                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-700"
-                          : "border-slate-100 hover:border-slate-300 text-slate-655 bg-slate-50/30"
-                      }`}
-                    >
-                      <Building2 className="w-5 h-5" />
-                      <span className="text-xs font-bold">Transfer Manual (BSI)</span>
-                    </button>
+                        return (
+                          <div key={idx} className="flex justify-between text-[11px] text-slate-700">
+                            <span className="font-medium">{typeStr}</span>
+                            <span className="font-bold text-slate-900">{formatRupiah(inv.amount)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex justify-between items-center border-t border-indigo-200/50 pt-1.5 mt-1.5">
+                      <span className="text-[9px] uppercase font-bold text-indigo-600">Total Tagihan</span>
+                      <span className="font-extrabold text-indigo-700 text-base">
+                        {pakasirData ? formatRupiah(pakasirData.payment.total_payment) : formatRupiah(selectedInvoicesList.reduce((sum, inv) => sum + inv.amount, 0))}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Payment Details Container */}
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 min-h-[140px] flex flex-col justify-center">
-                    {pakasirLoading ? (
-                      <div className="flex flex-col items-center justify-center py-6 space-y-2">
-                        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-                        <span className="text-xs text-slate-500 font-medium">Membuat Transaksi Pakasir...</span>
-                      </div>
-                    ) : paymentMethod === "qris" ? (
-                      pakasirData ? (
-                        <div className="flex flex-col items-center text-center space-y-2 py-2 animate-fadeIn">
-                          <div className="p-2.5 bg-white border border-slate-200 rounded-xl shadow-inner">
-                            <img
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(pakasirData.payment.payment_number)}`}
-                              alt="QRIS Pakasir"
-                              className="w-36 h-36"
-                            />
+                  {/* Main panel - Methods */}
+                  <div className="px-5 py-4 space-y-4">
+                    {showMethodSelector ? (
+                      <>
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                          Pilih Metode Pembayaran
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* QRIS */}
+                          <button
+                            onClick={() => handleSelectMethod("qris")}
+                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-650 bg-slate-50/30 transition-all gap-1 cursor-pointer"
+                          >
+                            <QrCode className="w-4.5 h-4.5 text-indigo-600" />
+                            <span className="text-[11px] font-bold text-slate-800">QRIS (GoPay/SPay)</span>
+                          </button>
+
+                          {/* BNI VA */}
+                          <button
+                            onClick={() => handleSelectMethod("bni_va")}
+                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-650 bg-slate-50/30 transition-all gap-1 cursor-pointer"
+                          >
+                            <Building2 className="w-4.5 h-4.5 text-indigo-600" />
+                            <span className="text-[11px] font-bold text-slate-800">BNI VA</span>
+                          </button>
+
+                          {/* BRI VA */}
+                          <button
+                            onClick={() => handleSelectMethod("bri_va")}
+                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 transition-all gap-1 cursor-pointer"
+                          >
+                            <Building2 className="w-4.5 h-4.5 text-indigo-600" />
+                            <span className="text-[11px] font-bold text-slate-800">BRI VA</span>
+                          </button>
+
+                          {/* CIMB VA */}
+                          <button
+                            onClick={() => handleSelectMethod("cimb_niaga_va")}
+                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 transition-all gap-1 cursor-pointer"
+                          >
+                            <Building2 className="w-4.5 h-4.5 text-indigo-600" />
+                            <span className="text-[11px] font-bold text-slate-800">CIMB Niaga VA</span>
+                          </button>
+
+                          {/* Transfer Manual BSI */}
+                          <button
+                            onClick={() => handleSelectMethod("tf_manual")}
+                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 transition-all gap-1 cursor-pointer col-span-2"
+                          >
+                            <Building2 className="w-4.5 h-4.5 text-indigo-600" />
+                            <span className="text-[11px] font-bold text-slate-800">Transfer Manual (BSI)</span>
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Active Method Header & Back Button */}
+                        <div className="flex justify-between items-center bg-indigo-50/45 p-2.5 rounded-xl border border-indigo-100/50 mb-1">
+                          <div className="flex items-center gap-1.5">
+                            {paymentMethod === "qris" ? (
+                              <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+                            ) : (
+                              <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                            )}
+                            <span className="text-[11px] font-bold text-slate-800">
+                              Metode: {paymentMethod === "tf_manual" ? "Transfer Manual (BSI)" : paymentMethod.replace("_", " ").toUpperCase()}
+                            </span>
                           </div>
                           <button
-                            onClick={() => downloadQris(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pakasirData.payment.payment_number)}`)}
-                            className="mt-1 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] transition-colors cursor-pointer"
+                            onClick={() => {
+                              setPakasirData(null);
+                              setShowMethodSelector(true);
+                            }}
+                            className="text-[9px] font-extrabold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
                           >
-                            Unduh QRIS (JPG)
+                            Ubah Metode Pembayaran
                           </button>
-                          <p className="text-[10px] text-slate-500 font-medium pt-1">
-                            Pindai kode QRIS di atas menggunakan aplikasi e-wallet pilihan Anda.
-                          </p>
-                          {pakasirData.payment.expired_at && (
-                            <p className="text-[10px] text-red-500 font-bold">
-                              Expired: {new Date(pakasirData.payment.expired_at).toLocaleTimeString("id-ID")}
-                            </p>
-                          )}
                         </div>
-                      ) : (
-                        <div className="text-center text-xs text-red-500 py-4">Gagal memuat QRIS. Silakan pilih metode lain.</div>
-                      )
-                    ) : paymentMethod !== "tf_manual" ? (
-                      pakasirData ? (
-                        <div className="space-y-2.5 text-xs text-slate-700 animate-fadeIn">
-                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                            Detail Virtual Account ({paymentMethod.replace("_va", "").toUpperCase()})
-                          </span>
-                          <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200">
-                            <span className="font-mono font-bold text-slate-800 text-sm tracking-wide">
-                              {realVaNumber}
-                            </span>
-                            <button
-                              onClick={() => copyToClipboard(realVaNumber)}
-                              className="text-indigo-600 hover:text-indigo-800 p-1 flex items-center gap-0.5 cursor-pointer font-bold"
-                            >
-                              {copied ? (
-                                <Check className="w-3.5 h-3.5" />
-                              ) : (
-                                <>
-                                  <Copy className="w-3.5 h-3.5" />
-                                  <span className="text-[10px] font-semibold">Salin</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                          <div className="flex justify-between text-[10px] text-slate-500 font-medium">
-                            <span>Biaya Layanan</span>
-                            <span>{formatRupiah(pakasirData.payment.fee)}</span>
-                          </div>
-                          <div className="flex justify-between text-[10px] text-slate-500 font-medium border-t border-slate-200/50 pt-1">
-                            <span>Total Pembayaran</span>
-                            <span className="font-bold text-slate-850">{formatRupiah(pakasirData.payment.total_payment)}</span>
-                          </div>
-                          {pakasirData.payment.expired_at && (
-                            <p className="text-[10px] text-red-500 font-bold">
-                              Expired: {new Date(pakasirData.payment.expired_at).toLocaleTimeString("id-ID")}
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-center text-xs text-red-500 py-4">Gagal memuat Virtual Account. Silakan pilih metode lain.</div>
-                      )
-                    ) : (
-                      /* Transfer Manual BSI */
-                      <div className="space-y-2.5 text-xs text-slate-700 animate-fadeIn">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                          Rekening Transfer Manual
-                        </span>
-                        <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2">
-                          <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                            <span className="text-slate-400">Bank</span>
-                            <span className="font-bold text-slate-800">BSI (Bank Syariah Indonesia)</span>
-                          </div>
-                          <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                            <span className="text-slate-400">Nomor Rekening</span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono font-bold text-slate-800 tracking-wide">
-                                7356970432
-                              </span>
-                              <button
-                                onClick={() => copyToClipboard("7356970432")}
-                                className="text-indigo-600 hover:text-indigo-800 p-1 flex items-center gap-0.5 cursor-pointer"
-                              >
-                                {copied ? (
-                                  <Check className="w-3.5 h-3.5" />
-                                ) : (
-                                  <>
-                                    <Copy className="w-3.5 h-3.5" />
-                                    <span className="text-[10px] font-semibold">Salin</span>
-                                  </>
-                                )}
-                              </button>
+
+                        {/* Payment Details Container */}
+                        <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-100 min-h-[120px] flex flex-col justify-center">
+                          {pakasirLoading ? (
+                            <div className="flex flex-col items-center justify-center py-4 space-y-2">
+                              <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                              <span className="text-[11px] text-slate-500 font-medium">Membuat Transaksi Pakasir...</span>
                             </div>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-400">Atas Nama</span>
-                            <span className="font-bold text-slate-800">Yayasan Al-Uswah</span>
-                          </div>
+                          ) : paymentMethod === "qris" ? (
+                            pakasirData ? (
+                              <div className="flex flex-col items-center text-center space-y-1.5 py-1 animate-fadeIn">
+                                <div className="p-2 bg-white border border-slate-200 rounded-xl shadow-inner">
+                                  <img
+                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(pakasirData.payment.payment_number)}`}
+                                    alt="QRIS Pakasir"
+                                    className="w-28 h-28"
+                                  />
+                                </div>
+                                <button
+                                  onClick={() => downloadQris(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pakasirData.payment.payment_number)}`)}
+                                  className="mt-0.5 flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[9px] transition-colors cursor-pointer"
+                                >
+                                  Unduh QRIS (JPG)
+                                </button>
+                                <p className="text-[9px] text-slate-500 font-medium pt-0.5">
+                                  Pindai kode QRIS di atas menggunakan aplikasi e-wallet pilihan Anda.
+                                </p>
+                                {pakasirData.payment.expired_at && (
+                                  <p className="text-[9px] text-red-500 font-bold">
+                                    Expired: {new Date(pakasirData.payment.expired_at).toLocaleTimeString("id-ID")}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-center text-xs text-red-500 py-3">Gagal memuat QRIS. Silakan pilih metode lain.</div>
+                            )
+                          ) : paymentMethod !== "tf_manual" ? (
+                            pakasirData ? (
+                              <div className="space-y-2 text-xs text-slate-700 animate-fadeIn">
+                                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">
+                                  Detail Virtual Account ({paymentMethod.replace("_va", "").toUpperCase()})
+                                </span>
+                                <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
+                                  <span className="font-mono font-bold text-slate-800 text-xs tracking-wide">
+                                    {realVaNumber}
+                                  </span>
+                                  <button
+                                    onClick={() => copyToClipboard(realVaNumber)}
+                                    className="text-indigo-600 hover:text-indigo-800 p-1 flex items-center gap-0.5 cursor-pointer font-bold text-[9px]"
+                                  >
+                                    {copied ? (
+                                      <Check className="w-3 h-3" />
+                                    ) : (
+                                      <>
+                                        <Copy className="w-3 h-3" />
+                                        <span className="font-semibold">Salin</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                                <div className="flex justify-between text-[9px] text-slate-500 font-medium">
+                                  <span>Biaya Layanan</span>
+                                  <span>{formatRupiah(pakasirData.payment.fee)}</span>
+                                </div>
+                                <div className="flex justify-between text-[9px] text-slate-500 font-medium border-t border-slate-200/50 pt-1">
+                                  <span>Total Pembayaran</span>
+                                  <span className="font-bold text-slate-800">{formatRupiah(pakasirData.payment.total_payment)}</span>
+                                </div>
+                                {pakasirData.payment.expired_at && (
+                                  <p className="text-[9px] text-red-500 font-bold">
+                                    Expired: {new Date(pakasirData.payment.expired_at).toLocaleTimeString("id-ID")}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-center text-xs text-red-500 py-3">Gagal memuat Virtual Account. Silakan pilih metode lain.</div>
+                            )
+                          ) : (
+                            /* Transfer Manual BSI */
+                            <div className="space-y-2 text-xs text-slate-700 animate-fadeIn">
+                              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">
+                                Rekening Transfer Manual
+                              </span>
+                              <div className="bg-white p-2 rounded-lg border border-slate-200 space-y-1.5">
+                                <div className="flex justify-between items-center pb-1.5 border-b border-slate-100">
+                                  <span className="text-slate-400 text-[10px]">Bank</span>
+                                  <span className="font-bold text-slate-800 text-[10px]">BSI (Bank Syariah Indonesia)</span>
+                                </div>
+                                <div className="flex justify-between items-center pb-1.5 border-b border-slate-100">
+                                  <span className="text-slate-400 text-[10px]">Nomor Rekening</span>
+                                  <div className="flex items-center gap-1">
+                                    <span className="font-mono font-bold text-slate-800 tracking-wide text-xs">
+                                      7356970432
+                                    </span>
+                                    <button
+                                      onClick={() => copyToClipboard("7356970432")}
+                                      className="text-indigo-600 hover:text-indigo-800 p-0.5 flex items-center gap-0.5 cursor-pointer text-[9px]"
+                                    >
+                                      {copied ? (
+                                        <Check className="w-3 h-3" />
+                                      ) : (
+                                        <>
+                                          <Copy className="w-3 h-3" />
+                                          <span className="font-semibold">Salin</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex justify-between items-center text-[10px]">
+                                  <span className="text-slate-400">Atas Nama</span>
+                                  <span className="font-bold text-slate-800">Yayasan Al-Uswah</span>
+                                </div>
+                              </div>
+                              <p className="text-[9px] text-slate-500 leading-normal">
+                                Silakan transfer sesuai nominal ke rekening BSI di atas. Setelah transfer, klik tombol di bawah untuk mengirimkan bukti transfer via WhatsApp ke nomor +62 896-7833-1076.
+                              </p>
+                            </div>
+                          )}
                         </div>
-                        <p className="text-[10px] text-slate-500 leading-normal">
-                          Silakan transfer sesuai nominal ke rekening BSI di atas. Setelah transfer, klik tombol di bawah untuk mengirimkan bukti transfer via WhatsApp ke nomor +62 896-7833-1076.
-                        </p>
-                      </div>
+                      </>
                     )}
                   </div>
                 </div>
 
                 {/* Footer Pay Button */}
-                <div className="px-6 py-5 bg-slate-50 border-t border-slate-100 flex flex-col gap-2">
-                  {paymentMethod === "tf_manual" ? (
-                    <button
-                      onClick={handleWhatsAppRedirect}
-                      disabled={processingPayment}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm py-3.5 rounded-xl transition-all shadow-md shadow-emerald-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-                    >
-                      {processingPayment ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Mengirim & Mengonfirmasi...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Kirim Bukti & Konfirmasi via WhatsApp</span>
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <>
+                {!showMethodSelector && (
+                  <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex flex-col gap-1.5 shrink-0">
+                    {paymentMethod === "tf_manual" ? (
                       <button
-                        onClick={handleCheckStatusManual}
-                        disabled={processingPayment || pakasirLoading || !pakasirData}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm py-3.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                        onClick={handleWhatsAppRedirect}
+                        disabled={processingPayment}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-emerald-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                       >
                         {processingPayment ? (
                           <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Memeriksa Status...</span>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Mengirim & Mengonfirmasi...</span>
                           </>
                         ) : (
-                          <span>Cek Status Pembayaran</span>
+                          <>
+                            <span>Kirim Bukti & Konfirmasi via WhatsApp</span>
+                          </>
                         )}
                       </button>
-                    </>
-                  )}
-                </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={handleCheckStatusManual}
+                          disabled={processingPayment || pakasirLoading || !pakasirData}
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                        >
+                          {processingPayment ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Memeriksa Status...</span>
+                            </>
+                          ) : (
+                            <span>Cek Status Pembayaran</span>
+                          )}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

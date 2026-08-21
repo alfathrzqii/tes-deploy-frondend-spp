@@ -73,6 +73,8 @@ export default function TransactionsPage() {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
+  const [filterMethod, setFilterMethod] = useState<string>("all");
+
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -241,7 +243,29 @@ export default function TransactionsPage() {
     }
   };
 
+  const filteredTransactions = transactions.filter((tr) => {
+    if (filterMethod === "all") return true;
+    if (filterMethod === "online") return tr.paymentMethod === "MIDTRANS";
+    if (filterMethod === "cash") return tr.paymentMethod === "CASH" || tr.paymentMethod === "TRANSFER";
+    return true;
+  });
+
+  const filteredIncome = filteredTransactions
+    .filter((t) => t.type === "INCOME")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const filteredExpense = filteredTransactions
+    .filter((t) => t.type === "EXPENSE")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const filteredBalance = filteredIncome - filteredExpense;
+
+  const totalIncome = filterMethod === "all" ? summary.totalIncome : filteredIncome;
+  const totalExpense = filterMethod === "all" ? summary.totalExpense : filteredExpense;
+  const currentBalance = filterMethod === "all" ? summary.currentBalance : filteredBalance;
+
   const getUnitName = (unitId: number) => {
+
     return SCHOOL_UNITS.find((u) => u.id === unitId)?.name || `Unit ${unitId}`;
   };
 
@@ -265,15 +289,16 @@ export default function TransactionsPage() {
 
   const handleExportCsv = () => {
     const headers = ["Tanggal", "Jenis", "Kategori", "Metode", "Nominal", "Deskripsi", "Unit Sekolah"];
-    const rows = transactions.map(t => [
+    const rows = filteredTransactions.map(t => [
       new Date(t.date).toLocaleDateString("id-ID"),
       t.type === "INCOME" ? "Pemasukan" : "Pengeluaran",
       t.category?.name || "",
-      t.paymentMethod,
+      t.paymentMethod === "MIDTRANS" ? "Online" : t.paymentMethod,
       t.amount,
       t.description || "",
       getUnitName(t.schoolUnitId)
     ]);
+
 
     const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -344,7 +369,7 @@ export default function TransactionsPage() {
               Total Pemasukan
             </p>
             <p className="text-xl font-extrabold text-emerald-400">
-              {formatRupiah(summary.totalIncome)}
+              {formatRupiah(totalIncome)}
             </p>
           </div>
           <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
@@ -359,7 +384,7 @@ export default function TransactionsPage() {
               Total Pengeluaran
             </p>
             <p className="text-xl font-extrabold text-rose-400">
-              {formatRupiah(summary.totalExpense)}
+              {formatRupiah(totalExpense)}
             </p>
           </div>
           <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400">
@@ -374,7 +399,7 @@ export default function TransactionsPage() {
               Saldo Saat Ini
             </p>
             <p className="text-xl font-extrabold text-indigo-400">
-              {formatRupiah(summary.currentBalance)}
+              {formatRupiah(currentBalance)}
             </p>
           </div>
           <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
@@ -383,14 +408,15 @@ export default function TransactionsPage() {
         </div>
       </div>
 
+
       {/* Filters Form */}
       <div className="bg-slate-900/40 border border-slate-800/80 p-5 rounded-xl space-y-4 backdrop-blur-md text-xs">
         <div className="flex items-center gap-2 text-slate-400">
           <Filter className="w-4 h-4 text-indigo-400" />
-          <span className="font-semibold text-white">Filter Rekapitulasi</span>
+          <span className="font-semibold text-white">Filter Jurnal Buku Kas</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {/* Unit selection (Only for SUPER_ADMIN) */}
           {!isUnitAdmin && (
             <div className="space-y-1">
@@ -424,6 +450,20 @@ export default function TransactionsPage() {
             </select>
           </div>
 
+          {/* Payment Method selection */}
+          <div className="space-y-1">
+            <label className="font-medium text-slate-400 block">Metode Pembayaran</label>
+            <select
+              value={filterMethod}
+              onChange={(e) => setFilterMethod(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 text-slate-300 px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+            >
+              <option value="all">Semua Metode</option>
+              <option value="online">Online</option>
+              <option value="cash">Cash (Tunai / Manual)</option>
+            </select>
+          </div>
+
           {/* Start Date */}
           <div className="space-y-1">
             <label className="font-medium text-slate-400 block flex items-center gap-1">
@@ -452,13 +492,14 @@ export default function TransactionsPage() {
         </div>
 
         {/* Reset filters button */}
-        {(filterUnitId !== "all" || filterType !== "all" || filterStartDate || filterEndDate) && (
+        {(filterUnitId !== "all" || filterType !== "all" || filterStartDate || filterEndDate || filterMethod !== "all") && (
           <button
             onClick={() => {
               setFilterUnitId("all");
               setFilterType("all");
               setFilterStartDate("");
               setFilterEndDate("");
+              setFilterMethod("all");
             }}
             className="text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors cursor-pointer"
           >
@@ -467,16 +508,19 @@ export default function TransactionsPage() {
         )}
       </div>
 
-      {/* Transactions History Table */}
+
+       {/* Transactions History Table */}
       <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden backdrop-blur-md">
         <div className="overflow-x-auto">
           {loading ? (
             <div className="p-12 text-center text-xs text-slate-500 animate-pulse">
               Memuat data jurnal kas...
             </div>
-          ) : transactions.length === 0 ? (
+          ) : filteredTransactions.length === 0 ? (
             <div className="p-12 text-center text-xs text-slate-500">
-              Tidak ada data transaksi kas yang terdaftar.
+              {transactions.length === 0 
+                ? "Tidak ada data transaksi kas yang terdaftar." 
+                : "Tidak ada data transaksi yang cocok dengan filter Anda."}
             </div>
           ) : (
             <table className="w-full text-left border-collapse">
@@ -494,7 +538,7 @@ export default function TransactionsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50 text-xs text-slate-300">
-                {transactions.map((tr) => (
+                {filteredTransactions.map((tr) => (
                   <tr
                     key={tr.id}
                     className="hover:bg-slate-800/10 transition-colors"
@@ -515,10 +559,17 @@ export default function TransactionsPage() {
                       {tr.category?.name}
                     </td>
                     <td className="px-6 py-4 font-medium">
-                      <span className="text-[10px] text-slate-400 bg-slate-800/40 border border-slate-700/60 px-2 py-0.5 rounded">
-                        {tr.paymentMethod}
+                      <span className={`text-[10px] px-2 py-0.5 rounded border font-bold ${
+                        tr.paymentMethod === "MIDTRANS"
+                          ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 animate-fadeIn"
+                          : tr.paymentMethod === "TRANSFER"
+                          ? "bg-sky-500/10 text-sky-400 border-sky-500/20"
+                          : "bg-slate-800/40 text-slate-400 border-slate-700/60"
+                      }`}>
+                        {tr.paymentMethod === "MIDTRANS" ? "ONLINE" : tr.paymentMethod}
                       </span>
                     </td>
+
                     <td className={`px-6 py-4 font-bold ${
                       tr.type === "INCOME" ? "text-emerald-400" : "text-rose-400"
                     }`}>
