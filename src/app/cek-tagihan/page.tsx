@@ -92,7 +92,92 @@ export default function CekTagihanPage() {
   const [pakasirLoading, setPakasirLoading] = useState(false);
   const [pakasirData, setPakasirData] = useState<any>(null);
   const [realVaNumber, setRealVaNumber] = useState("");
-  const [showMethodSelector, setShowMethodSelector] = useState(true);
+  
+  // New Payment Flow Steps
+  const [checkoutStep, setCheckoutStep] = useState<"SELECT_METHOD" | "METHOD_PREVIEW" | "PAYMENT_DETAILS">("SELECT_METHOD");
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [manualExpiredAt, setManualExpiredAt] = useState<string | null>(null);
+
+  const getPaymentFeeText = (method: string, baseAmount: number) => {
+    if (method === "tf_manual") {
+      return "Gratis (Sesama BSI) / Rp 2.500 (Bank Lain)";
+    }
+    if (method === "qris") {
+      const fee = Math.round(baseAmount * 0.008);
+      return `${formatRupiah(fee)} (0,8%)`;
+    }
+    return formatRupiah(3500); // VA fee
+  };
+
+  const getPaymentTotalText = (method: string, baseAmount: number) => {
+    if (method === "tf_manual") {
+      const totalOther = baseAmount + 2500;
+      return `${formatRupiah(baseAmount)} (Sesama BSI) / ${formatRupiah(totalOther)} (Bank Lain)`;
+    }
+    if (method === "qris") {
+      const total = baseAmount + Math.round(baseAmount * 0.008);
+      return formatRupiah(total);
+    }
+    return formatRupiah(baseAmount + 3500); // VA total
+  };
+
+  const getPaymentMethodName = (method: string) => {
+    switch (method) {
+      case "qris": return "QRIS (GoPay/ShopeePay)";
+      case "bni_va": return "BNI Virtual Account";
+      case "bri_va": return "BRI Virtual Account";
+      case "cimb_niaga_va": return "CIMB Niaga Virtual Account";
+      case "tf_manual": return "Transfer Manual (BSI)";
+      default: return "Metode Pembayaran";
+    }
+  };
+
+  const getPaymentInstructions = (method: string) => {
+    switch (method) {
+      case "qris":
+        return [
+          "Buka aplikasi e-wallet (GoPay, OVO, Dana, LinkAja, ShopeePay) atau m-Banking Anda.",
+          "Scan kode QRIS yang muncul di layar pembayaran.",
+          "Periksa nominal pembayaran dan pastikan penerima adalah Yayasan Al Uswah / Pakasir.",
+          "Masukkan PIN e-wallet/bank Anda untuk menyelesaikan pembayaran.",
+          "Selesai! Sistem akan mendeteksi pelunasan secara otomatis."
+        ];
+      case "bni_va":
+      case "bri_va":
+      case "cimb_niaga_va":
+        const bankName = method.split("_")[0].toUpperCase();
+        return [
+          `Salin nomor Virtual Account ${bankName} yang tertera di layar.`,
+          `Buka aplikasi Mobile Banking Anda atau kunjungi ATM terdekat.`,
+          `Pilih menu Transfer > Virtual Account Billing (atau sejenisnya).`,
+          `Masukkan nomor Virtual Account ${bankName} yang telah disalin.`,
+          `Periksa nominal tagihan yang muncul, lalu masukkan PIN bank Anda untuk konfirmasi.`
+        ];
+      case "tf_manual":
+        return [
+          "Lakukan transfer manual ke rekening Bank Syariah Indonesia (BSI) Yayasan Al-Uswah.",
+          "Nomor Rekening: 7356970432.",
+          "Biaya layanan gratis jika menggunakan sesama rekening BSI, atau dikenakan Rp 2.500 jika transfer dari bank lain.",
+          "Setelah transfer selesai, pastikan Anda menyimpan foto atau screenshot bukti transaksi.",
+          "Klik tombol 'Kirim Bukti via WhatsApp' di halaman pembayaran untuk konfirmasi ke Admin."
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const formatCountdown = (secs: number) => {
+    const hours = Math.floor(secs / 3600);
+    const minutes = Math.floor((secs % 3600) / 60);
+    const seconds = secs % 60;
+
+    const pad = (num: number) => String(num).padStart(2, "0");
+
+    if (hours > 0) {
+      return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+    }
+    return `${pad(minutes)}:${pad(seconds)}`;
+  };
 
 
   const formatRupiah = (value: number) => {
@@ -230,7 +315,9 @@ export default function CekTagihanPage() {
     setProcessingPayment(false);
     setPakasirData(null);
     setRealVaNumber("");
-    setShowMethodSelector(true);
+    setCheckoutStep("SELECT_METHOD");
+    setSecondsLeft(null);
+    setManualExpiredAt(null);
   };
 
   const handleOpenSnapBatch = () => {
@@ -246,14 +333,22 @@ export default function CekTagihanPage() {
     setProcessingPayment(false);
     setPakasirData(null);
     setRealVaNumber("");
-    setShowMethodSelector(true);
+    setCheckoutStep("SELECT_METHOD");
+    setSecondsLeft(null);
+    setManualExpiredAt(null);
   };
 
   const handleSelectMethod = (method: "qris" | "bni_va" | "bri_va" | "cimb_niaga_va" | "tf_manual") => {
     setPaymentMethod(method);
-    setShowMethodSelector(false);
-    if (method !== "tf_manual" && selectedInvoicesList.length > 0) {
-      fetchPakasirTransaction(method, selectedInvoicesList);
+    setCheckoutStep("METHOD_PREVIEW");
+  };
+
+  const handleConfirmPayment = () => {
+    setCheckoutStep("PAYMENT_DETAILS");
+    if (paymentMethod === "tf_manual") {
+      setManualExpiredAt(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+    } else if (selectedInvoicesList.length > 0) {
+      fetchPakasirTransaction(paymentMethod, selectedInvoicesList);
     }
   };
 
@@ -365,6 +460,35 @@ export default function CekTagihanPage() {
       }
     };
   }, [snapOpen, pakasirData, paymentSuccess, paymentMethod, invoices, selectedInvoicesList]);
+
+  // Countdown Timer Effect
+  useEffect(() => {
+    let timerId: any = null;
+    const targetExpiredAt = paymentMethod === "tf_manual" ? manualExpiredAt : pakasirData?.payment?.expired_at;
+    
+    if (checkoutStep === "PAYMENT_DETAILS" && targetExpiredAt) {
+      const calculateSecondsLeft = () => {
+        const diffMs = new Date(targetExpiredAt).getTime() - new Date().getTime();
+        const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
+        setSecondsLeft(diffSecs);
+      };
+      
+      calculateSecondsLeft();
+      timerId = setInterval(() => {
+        const diffMs = new Date(targetExpiredAt).getTime() - new Date().getTime();
+        const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
+        setSecondsLeft(diffSecs);
+        if (diffSecs <= 0) {
+          clearInterval(timerId);
+        }
+      }, 1000);
+    } else {
+      setSecondsLeft(null);
+    }
+    return () => {
+      if (timerId) clearInterval(timerId);
+    };
+  }, [checkoutStep, pakasirData, paymentMethod, manualExpiredAt]);
 
   const handleSimulatePayment = async () => {
     if (selectedInvoicesList.length === 0) return;
@@ -916,7 +1040,7 @@ export default function CekTagihanPage() {
 
                   {/* Main panel - Methods */}
                   <div className="px-5 py-4 space-y-4">
-                    {showMethodSelector ? (
+                    {checkoutStep === "SELECT_METHOD" ? (
                       <>
                         <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                           Pilih Metode Pembayaran
@@ -926,7 +1050,7 @@ export default function CekTagihanPage() {
                           {/* QRIS */}
                           <button
                             onClick={() => handleSelectMethod("qris")}
-                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-650 bg-slate-50/30 transition-all gap-1 cursor-pointer"
+                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 transition-all gap-1 cursor-pointer"
                           >
                             <QrCode className="w-4.5 h-4.5 text-indigo-600" />
                             <span className="text-[11px] font-bold text-slate-800">QRIS (GoPay/SPay)</span>
@@ -935,7 +1059,7 @@ export default function CekTagihanPage() {
                           {/* BNI VA */}
                           <button
                             onClick={() => handleSelectMethod("bni_va")}
-                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-650 bg-slate-50/30 transition-all gap-1 cursor-pointer"
+                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 transition-all gap-1 cursor-pointer"
                           >
                             <Building2 className="w-4.5 h-4.5 text-indigo-600" />
                             <span className="text-[11px] font-bold text-slate-800">BNI VA</span>
@@ -969,15 +1093,87 @@ export default function CekTagihanPage() {
                           </button>
                         </div>
                       </>
+                    ) : checkoutStep === "METHOD_PREVIEW" ? (
+                      <div className="space-y-4 animate-fadeIn text-slate-805">
+                        {/* Selected Method Summary Header */}
+                        <div className="flex justify-between items-center bg-indigo-50/80 p-2.5 rounded-xl border border-indigo-200/70 shadow-xs">
+                          <div className="flex items-center gap-1.5">
+                            {paymentMethod === "qris" ? (
+                              <QrCode className="w-4 h-4 text-indigo-600" />
+                            ) : (
+                              <Building2 className="w-4 h-4 text-indigo-600" />
+                            )}
+                            <span className="text-[11px] font-bold text-slate-800">
+                              Metode: {getPaymentMethodName(paymentMethod)}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => setCheckoutStep("SELECT_METHOD")}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 hover:border-indigo-400 rounded-lg text-[10px] font-bold transition-all shadow-xs cursor-pointer"
+                          >
+                            <ArrowLeft className="w-3 h-3 text-indigo-600" />
+                            <span>Ubah Metode</span>
+                          </button>
+                        </div>
+
+                        {/* Preview Rincian Biaya */}
+                        <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200/70 space-y-2 text-xs">
+                          <div className="font-bold text-slate-850 text-[10px] uppercase tracking-wider">Preview Rincian Biaya</div>
+                          <div className="flex justify-between text-slate-600">
+                            <span>Subtotal Tagihan ({selectedInvoicesList.length} item)</span>
+                            <span>
+                              {formatRupiah(selectedInvoicesList.reduce((sum, inv) => sum + inv.amount, 0))}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-slate-655 font-medium">
+                            <span>Biaya Layanan</span>
+                            <span>
+                              {getPaymentFeeText(paymentMethod, selectedInvoicesList.reduce((sum, inv) => sum + inv.amount, 0))}
+                            </span>
+                          </div>
+                          <div className="flex justify-between border-t border-slate-200/80 pt-2 font-bold text-slate-800 text-sm">
+                            <span>Total Pembayaran (Estimasi)</span>
+                            <span className="text-indigo-650 font-extrabold text-base">
+                              {getPaymentTotalText(paymentMethod, selectedInvoicesList.reduce((sum, inv) => sum + inv.amount, 0))}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Cara Pembayaran */}
+                        <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200/70 space-y-2 text-xs">
+                          <div className="font-bold text-slate-850 text-[10px] uppercase tracking-wider">Cara Pembayaran</div>
+                          <ol className="list-decimal pl-4 space-y-1.5 text-[11px] text-slate-600 leading-relaxed">
+                            {getPaymentInstructions(paymentMethod).map((step, idx) => (
+                              <li key={idx}>{step}</li>
+                            ))}
+                          </ol>
+                        </div>
+
+                        {/* Action buttons inside the panel */}
+                        <div className="flex gap-2.5 pt-2">
+                          <button
+                            onClick={() => setCheckoutStep("SELECT_METHOD")}
+                            className="flex-1 px-4 py-2.5 border border-slate-350 hover:bg-slate-100 text-slate-655 rounded-xl text-xs font-bold transition-all cursor-pointer text-center"
+                          >
+                            Kembali
+                          </button>
+                          <button
+                            onClick={handleConfirmPayment}
+                            className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer text-center"
+                          >
+                            Lanjutkan Pembayaran
+                          </button>
+                        </div>
+                      </div>
                     ) : (
                       <>
                         {/* Active Method Header & Back Button */}
-                        <div className="flex justify-between items-center bg-indigo-50/45 p-2.5 rounded-xl border border-indigo-100/50 mb-1">
+                        <div className="flex justify-between items-center bg-indigo-50/80 p-2.5 rounded-xl border border-indigo-200/70 mb-1 shadow-xs">
                           <div className="flex items-center gap-1.5">
                             {paymentMethod === "qris" ? (
-                              <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+                              <QrCode className="w-4 h-4 text-indigo-600" />
                             ) : (
-                              <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                              <Building2 className="w-4 h-4 text-indigo-600" />
                             )}
                             <span className="text-[11px] font-bold text-slate-800">
                               Metode: {paymentMethod === "tf_manual" ? "Transfer Manual (BSI)" : paymentMethod.replace("_", " ").toUpperCase()}
@@ -986,13 +1182,32 @@ export default function CekTagihanPage() {
                           <button
                             onClick={() => {
                               setPakasirData(null);
-                              setShowMethodSelector(true);
+                              setCheckoutStep("SELECT_METHOD");
                             }}
-                            className="text-[9px] font-extrabold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold transition-all shadow-sm shadow-indigo-600/20 cursor-pointer"
                           >
-                            Ubah Metode Pembayaran
+                            <ArrowLeft className="w-3 h-3" />
+                            <span>Ubah Metode Pembayaran</span>
                           </button>
                         </div>
+
+                        {/* Countdown expired timer */}
+                        {secondsLeft !== null && secondsLeft > 0 && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between animate-pulse">
+                            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">
+                              Sisa Waktu Pembayaran
+                            </span>
+                            <span className="font-mono font-bold text-xs bg-amber-600 text-white px-2 py-0.5 rounded shadow-sm">
+                              {formatCountdown(secondsLeft)}
+                            </span>
+                          </div>
+                        )}
+
+                        {secondsLeft === 0 && (
+                          <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-center text-red-700 font-bold text-[10px] uppercase">
+                            ⚠️ Batas Waktu Pembayaran Habis. Silakan buat transaksi baru.
+                          </div>
+                        )}
 
                         {/* Payment Details Container */}
                         <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-100 min-h-[120px] flex flex-col justify-center">
@@ -1001,6 +1216,8 @@ export default function CekTagihanPage() {
                               <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
                               <span className="text-[11px] text-slate-500 font-medium">Membuat Transaksi Pakasir...</span>
                             </div>
+                          ) : secondsLeft === 0 ? (
+                            <div className="text-center text-xs text-red-500 py-3">Transaksi ini telah kedaluwarsa. Silakan kembali untuk memilih metode lagi.</div>
                           ) : paymentMethod === "qris" ? (
                             pakasirData ? (
                               <div className="flex flex-col items-center text-center space-y-1.5 py-1 animate-fadeIn">
@@ -1020,11 +1237,6 @@ export default function CekTagihanPage() {
                                 <p className="text-[9px] text-slate-500 font-medium pt-0.5">
                                   Pindai kode QRIS di atas menggunakan aplikasi e-wallet pilihan Anda.
                                 </p>
-                                {pakasirData.payment.expired_at && (
-                                  <p className="text-[9px] text-red-500 font-bold">
-                                    Expired: {new Date(pakasirData.payment.expired_at).toLocaleTimeString("id-ID")}
-                                  </p>
-                                )}
                               </div>
                             ) : (
                               <div className="text-center text-xs text-red-500 py-3">Gagal memuat QRIS. Silakan pilih metode lain.</div>
@@ -1061,11 +1273,6 @@ export default function CekTagihanPage() {
                                   <span>Total Pembayaran</span>
                                   <span className="font-bold text-slate-800">{formatRupiah(pakasirData.payment.total_payment)}</span>
                                 </div>
-                                {pakasirData.payment.expired_at && (
-                                  <p className="text-[9px] text-red-500 font-bold">
-                                    Expired: {new Date(pakasirData.payment.expired_at).toLocaleTimeString("id-ID")}
-                                  </p>
-                                )}
                               </div>
                             ) : (
                               <div className="text-center text-xs text-red-500 py-3">Gagal memuat Virtual Account. Silakan pilih metode lain.</div>
@@ -1089,7 +1296,7 @@ export default function CekTagihanPage() {
                                     </span>
                                     <button
                                       onClick={() => copyToClipboard("7356970432")}
-                                      className="text-indigo-600 hover:text-indigo-800 p-0.5 flex items-center gap-0.5 cursor-pointer text-[9px]"
+                                      className="text-indigo-650 hover:text-indigo-805 p-0.5 flex items-center gap-0.5 cursor-pointer text-[9px]"
                                     >
                                       {copied ? (
                                         <Check className="w-3 h-3" />
@@ -1119,12 +1326,12 @@ export default function CekTagihanPage() {
                 </div>
 
                 {/* Footer Pay Button */}
-                {!showMethodSelector && (
+                {checkoutStep === "PAYMENT_DETAILS" && (
                   <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex flex-col gap-1.5 shrink-0">
                     {paymentMethod === "tf_manual" ? (
                       <button
                         onClick={handleWhatsAppRedirect}
-                        disabled={processingPayment}
+                        disabled={processingPayment || secondsLeft === 0}
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-emerald-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                       >
                         {processingPayment ? (
@@ -1142,7 +1349,7 @@ export default function CekTagihanPage() {
                       <>
                         <button
                           onClick={handleCheckStatusManual}
-                          disabled={processingPayment || pakasirLoading || !pakasirData}
+                          disabled={processingPayment || pakasirLoading || !pakasirData || secondsLeft === 0}
                           className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                         >
                           {processingPayment ? (
