@@ -80,8 +80,8 @@ export default function UnpaidPage() {
   useEffect(() => {
     const qUnitId = searchParams.get("schoolUnitId");
     const qClassName = searchParams.get("className");
-    if (qUnitId) setFilterUnitId(qUnitId);
-    if (qClassName) setFilterClass(qClassName);
+    setFilterUnitId(qUnitId || "all");
+    setFilterClass(qClassName || "");
   }, [searchParams]);
 
   const fetchUnpaidInvoices = async () => {
@@ -310,7 +310,10 @@ _Sistem Keuangan Sekolah SPP_`;
           {!isUnitAdmin && !isWaliKelas && (
             <select
               value={filterUnitId}
-              onChange={(e) => setFilterUnitId(e.target.value)}
+              onChange={(e) => {
+                setFilterUnitId(e.target.value);
+                setFilterClass(""); // Reset class when unit changes to prevent cross-unit leaks
+              }}
               className="bg-slate-950 border border-slate-800 text-slate-300 px-3 py-1.5 rounded-lg text-[11px] focus:outline-none focus:border-indigo-500 transition-colors"
             >
               <option value="all">Semua Unit</option>

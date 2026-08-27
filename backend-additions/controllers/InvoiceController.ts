@@ -112,23 +112,27 @@ export class InvoiceController {
         for (let m = 1; m <= upToMonth; m++) {
           const inv = dbInvoices.find((i) => i.month === m);
           if (!inv) {
-            totalUnpaidMonths++;
-            totalUnpaidAmount += netAmount;
-            unpaidMonthsList.push({
-              month: m,
-              status: "PENDING",
-              totalAmount: netAmount,
-              unpaidAmount: netAmount,
-            });
+            if (netAmount > 0) {
+              totalUnpaidMonths++;
+              totalUnpaidAmount += netAmount;
+              unpaidMonthsList.push({
+                month: m,
+                status: "PENDING",
+                totalAmount: netAmount,
+                unpaidAmount: netAmount,
+              });
+            }
           } else if ((inv.status as any) === "PENDING") {
-            totalUnpaidMonths++;
-            totalUnpaidAmount += inv.amount;
-            unpaidMonthsList.push({
-              month: m,
-              status: "PENDING",
-              totalAmount: inv.amount,
-              unpaidAmount: inv.amount,
-            });
+            if (netAmount > 0) {
+              totalUnpaidMonths++;
+              totalUnpaidAmount += netAmount;
+              unpaidMonthsList.push({
+                month: m,
+                status: "PENDING",
+                totalAmount: netAmount,
+                unpaidAmount: netAmount,
+              });
+            }
           } else if ((inv.status as any) === "PARTIALLY_PAID") {
             const txSum = await prisma.transaction.aggregate({
               where: { invoiceId: inv.id, type: "INCOME" as any },
@@ -282,11 +286,15 @@ export class InvoiceController {
           for (let m = 1; m <= upToMonth; m++) {
             const inv = dbInvoices.find((i) => i.month === m);
             if (!inv) {
-              studentUnpaidMonths++;
-              studentUnpaidAmount += netAmount;
+              if (netAmount > 0) {
+                studentUnpaidMonths++;
+                studentUnpaidAmount += netAmount;
+              }
             } else if ((inv.status as any) === "PENDING") {
-              studentUnpaidMonths++;
-              studentUnpaidAmount += inv.amount;
+              if (netAmount > 0) {
+                studentUnpaidMonths++;
+                studentUnpaidAmount += netAmount;
+              }
             } else if ((inv.status as any) === "PARTIALLY_PAID") {
               const txSum = await prisma.transaction.aggregate({
                 where: { invoiceId: inv.id, type: "INCOME" as any },
