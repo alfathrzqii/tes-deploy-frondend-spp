@@ -21,7 +21,8 @@ import {
   QrCode,
   Building2,
   Wallet,
-  ArrowRight
+  ArrowRight,
+  Download
 } from "lucide-react";
 
 interface StudentInfo {
@@ -578,20 +579,115 @@ export default function CekTagihanPage() {
     window.open(getWhatsAppLink(), "_blank");
   };
 
-  const downloadQris = async (qrUrl: string) => {
+  const fallbackDirectDownload = async (url: string) => {
     try {
-      const response = await fetch(qrUrl);
+      const response = await fetch(url);
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
-      link.download = `QRIS_${student?.studentNumber || studentNumber}_${selectedInvoice?.month}_${selectedInvoice?.year}.jpg`;
+      link.download = `QRIS_${student?.studentNumber || studentNumber}_${Date.now()}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, "_blank");
+    }
+  };
+
+  const downloadQris = async (qrisDataString: string, totalPayment?: number) => {
+    try {
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&format=png&data=${encodeURIComponent(qrisDataString)}`;
+      
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Gagal memuat gambar QRIS"));
+        img.src = qrUrl;
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 600;
+      canvas.height = 760;
+      const ctx = canvas.getContext("2d");
+
+      if (ctx) {
+        // Background
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Header Background Banner
+        ctx.fillStyle = "#1e1b4b"; // Dark Indigo
+        ctx.fillRect(0, 0, canvas.width, 100);
+
+        // Header Title
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 24px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("QRIS - PEMBAYARAN SIKUAT", canvas.width / 2, 45);
+
+        ctx.fillStyle = "#fbbf24"; // Amber
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText("Yayasan Al Uswah Terpadu", canvas.width / 2, 75);
+
+        // Student Info
+        ctx.fillStyle = "#334155";
+        ctx.font = "14px sans-serif";
+        const studentInfo = student ? `${student.name} (${student.studentNumber})` : `NIS: ${studentNumber}`;
+        ctx.fillText(studentInfo, canvas.width / 2, 130);
+
+        // Draw QR Code (with ample quiet zone padding)
+        const qrSize = 420;
+        const qrX = (canvas.width - qrSize) / 2;
+        const qrY = 150;
+        ctx.drawImage(img, qrX, qrY, qrSize, qrSize);
+
+        // Footer Card: Total Amount
+        ctx.fillStyle = "#f8fafc";
+        ctx.fillRect(40, 590, canvas.width - 80, 80);
+        ctx.strokeStyle = "#cbd5e1";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(40, 590, canvas.width - 80, 80);
+
+        ctx.fillStyle = "#64748b";
+        ctx.font = "12px sans-serif";
+        ctx.fillText("TOTAL PEMBAYARAN", canvas.width / 2, 615);
+
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "bold 24px monospace";
+        const totalText = totalPayment ? formatRupiah(totalPayment) : (selectedInvoice ? formatRupiah(selectedInvoice.amount) : "Sesuai Tagihan");
+        ctx.fillText(totalText, canvas.width / 2, 650);
+
+        // Scan Instructions
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "11px sans-serif";
+        ctx.fillText("Scan menggunakan BCA, Mandiri, BRI, BSI, GoPay, OVO, Dana, ShopeePay", canvas.width / 2, 705);
+        ctx.fillText("atau aplikasi Mobile Banking / e-Wallet lainnya", canvas.width / 2, 725);
+
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            fallbackDirectDownload(qrUrl);
+            return;
+          }
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = `QRIS_${student?.studentNumber || studentNumber}_${Date.now()}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(blobUrl);
+        }, "image/png");
+      } else {
+        fallbackDirectDownload(qrUrl);
+      }
     } catch (err) {
-      window.open(qrUrl, "_blank");
+      console.error("Gagal generate QRIS canvas", err);
+      const fallbackUrl = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&format=png&data=${encodeURIComponent(qrisDataString)}`;
+      fallbackDirectDownload(fallbackUrl);
     }
   };
 
@@ -1221,21 +1317,22 @@ export default function CekTagihanPage() {
                           ) : paymentMethod === "qris" ? (
                             pakasirData ? (
                               <div className="flex flex-col items-center text-center space-y-1.5 py-1 animate-fadeIn">
-                                <div className="p-2 bg-white border border-slate-200 rounded-xl shadow-inner">
+                                <div className="p-2.5 bg-white border border-slate-200 rounded-xl shadow-inner">
                                   <img
-                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(pakasirData.payment.payment_number)}`}
+                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&format=png&data=${encodeURIComponent(pakasirData.payment.payment_number)}`}
                                     alt="QRIS Pakasir"
-                                    className="w-28 h-28"
+                                    className="w-32 h-32"
                                   />
                                 </div>
                                 <button
-                                  onClick={() => downloadQris(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pakasirData.payment.payment_number)}`)}
-                                  className="mt-0.5 flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[9px] transition-colors cursor-pointer"
+                                  onClick={() => downloadQris(pakasirData.payment.payment_number, pakasirData.payment.total_payment)}
+                                  className="mt-1 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] transition-colors cursor-pointer shadow-sm shadow-indigo-600/20"
                                 >
-                                  Unduh QRIS (JPG)
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>Unduh QRIS Resmi (PNG)</span>
                                 </button>
-                                <p className="text-[9px] text-slate-500 font-medium pt-0.5">
-                                  Pindai kode QRIS di atas menggunakan aplikasi e-wallet pilihan Anda.
+                                <p className="text-[9px] text-slate-500 font-medium pt-0.5 max-w-xs">
+                                  Pindai kode QRIS di atas langsung dari aplikasi Mobile Banking atau e-Wallet pilihan Anda.
                                 </p>
                               </div>
                             ) : (

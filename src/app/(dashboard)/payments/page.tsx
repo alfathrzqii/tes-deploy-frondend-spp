@@ -211,6 +211,23 @@ export default function PaymentsPage() {
     }
   }, [foundStudent, invoiceType, selectedMonth, selectedYear, studentInvoices]);
 
+  // Helper to fetch student invoices for specific year
+  const fetchStudentInvoices = async (studentNum: string, year: number) => {
+    try {
+      const invResponse = await api.get(`/invoices/student/${studentNum}?year=${year}`);
+      setStudentInvoices(invResponse.data.data || invResponse.data.allInvoices || []);
+    } catch (err) {
+      console.error("Gagal mengambil data invoice siswa", err);
+    }
+  };
+
+  // Auto re-fetch invoices when selected year changes or student changes
+  useEffect(() => {
+    if (foundStudent) {
+      fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
+    }
+  }, [foundStudent, selectedYear]);
+
   const handleSearchStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nisQuery.trim()) return;
@@ -232,9 +249,8 @@ export default function PaymentsPage() {
 
       if (match) {
         setFoundStudent(match);
-        // Fetch existing invoices for student
-        const invResponse = await api.get(`/invoices/student/${match.studentNumber}`);
-        setStudentInvoices(invResponse.data.data || []);
+        // Fetch existing invoices for student for selected year
+        fetchStudentInvoices(match.studentNumber, selectedYear);
       } else {
         setError("Siswa dengan Nomor Induk tersebut tidak ditemukan");
       }
@@ -255,12 +271,13 @@ export default function PaymentsPage() {
     setSubmitLoading(true);
 
     try {
+      const enteredPayment = Number(paymentAmount);
       const payload = {
         studentNumber: foundStudent.studentNumber,
         month: invoiceType === "SPP" || invoiceType === "FULLDAY" ? selectedMonth : 7,
         year: selectedYear,
         invoiceType,
-        paymentAmount: Number(paymentAmount),
+        paymentAmount: enteredPayment,
       };
 
       const response = await api.post("/invoices/pay-offline", payload);
@@ -270,16 +287,16 @@ export default function PaymentsPage() {
         invoiceType: rawData.invoiceType || invoiceType,
         month: rawData.month || selectedMonth,
         year: rawData.year || selectedYear,
-        amount: rawData.amount || rawData.amountPaid || Number(paymentAmount),
+        amount: rawData.amount || rawData.amountPaid || enteredPayment,
+        paidAmount: enteredPayment,
         status: rawData.status || "PAID",
       };
       setSuccessMsg(response.data.message || "Pembayaran tunai berhasil diproses");
       setReceiptData(invData);
       setShowReceiptModal(true);
       
-      // Refresh invoices
-      const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
-      setStudentInvoices(invResponse.data.data || []);
+      // Refresh invoices for selected year
+      fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
     } catch (err: any) {
       setError(err.response?.data?.message || "Gagal memproses pembayaran");
     } finally {
@@ -710,6 +727,7 @@ export default function PaymentsPage() {
       ? `Bulan ${MONTHS.find(m => m.value === receiptData.month)?.name} ${receiptData.year}`
       : `${getInvoiceTypeName(receiptData.invoiceType)} ${receiptData.year}`;
       
+    const paidNominal = receiptData.paidAmount || receiptData.amount || 0;
     const message = `*KWITANSI BUKTI PEMBAYARAN RESMI*\n` +
       `*SIKUAT - Yayasan Al Uswah Terpadu*\n\n` +
       `Terima kasih, pembayaran SPP/Sekolah putra/putri Anda telah *BERHASIL* dicatat di Kasir Loket.\n\n` +
@@ -719,7 +737,7 @@ export default function PaymentsPage() {
       `- *NIS:* ${foundStudent.studentNumber}\n` +
       `- *Unit/Kelas:* ${getUnitName(foundStudent.schoolUnitId)} - ${foundStudent.className}\n` +
       `- *Pembayaran:* ${getInvoiceTypeName(receiptData.invoiceType)} (${periodStr})\n` +
-      `- *Nominal Dibayar:* ${formatRupiah(Number(paymentAmount))}\n` +
+      `- *Nominal Dibayar:* ${formatRupiah(paidNominal)}\n` +
       `- *Status:* ${receiptData.status === "PAID" ? "LUNAS" : "TERBAYAR SEBAGIAN"}\n` +
       `- *Tanggal:* ${new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}\n\n` +
       `_Pesan ini dikirim otomatis oleh Sistem Informasi Keuangan SIKUAT Al Uswah Terpadu._`;
@@ -1116,7 +1134,7 @@ export default function PaymentsPage() {
                 
                 <div className="border-t border-slate-850 pt-3 flex justify-between items-center">
                   <span className="text-xs font-bold text-white uppercase">Uang Tunai Diterima</span>
-                  <span className="text-base font-black text-emerald-400 font-mono">{formatRupiah(Number(paymentAmount))}</span>
+                  <span className="text-base font-black text-emerald-400 font-mono">{formatRupiah(receiptData.paidAmount || receiptData.amount || 0)}</span>
                 </div>
               </div>
 
@@ -1236,8 +1254,7 @@ export default function PaymentsPage() {
                                         });
                                       }
                                       // Refresh student invoices
-                                      const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
-                                      setStudentInvoices(invResponse.data.data || []);
+                                      fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
                                       setSuccessMsg("Status pembayaran berhasil diubah menjadi Lunas!");
                                     } catch (err: any) {
                                       alert(err.response?.data?.message || "Gagal mengubah status");
@@ -1262,8 +1279,7 @@ export default function PaymentsPage() {
                                     if (confirm(`Apakah Anda yakin ingin membatalkan pelunasan tagihan ini (Set Belum Lunas)? Semua riwayat transaksi kasir untuk tagihan ini akan terhapus.`)) {
                                       try {
                                         await api.put(`/invoices/${inv.id}/status`, { status: "PENDING" });
-                                        const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
-                                        setStudentInvoices(invResponse.data.data || []);
+                                        fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
                                         setSuccessMsg("Status pembayaran berhasil diubah menjadi Belum Lunas!");
                                       } catch (err: any) {
                                         alert(err.response?.data?.message || "Gagal mengubah status");
@@ -1279,8 +1295,7 @@ export default function PaymentsPage() {
                                     if (confirm(`Apakah Anda yakin ingin MENGHAPUS data tagihan beserta riwayat transaksinya dari database? Tindakan ini tidak dapat dibatalkan.`)) {
                                       try {
                                         await api.delete(`/invoices/${inv.id}`);
-                                        const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
-                                        setStudentInvoices(invResponse.data.data || []);
+                                        fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
                                         setSuccessMsg("Data tagihan berhasil dihapus sepenuhnya!");
                                       } catch (err: any) {
                                         alert(err.response?.data?.message || "Gagal menghapus tagihan");
@@ -1390,7 +1405,9 @@ export default function PaymentsPage() {
                   <span className="col-span-7 font-bold text-emerald-400">
                     {receiptData.invoiceType === "SPP" 
                       ? `Pembayaran SPP Bulanan - ${MONTHS.find(m => m.value === receiptData.month)?.name} ${receiptData.year}`
-                      : `Cicilan Uang Pengembangan ${receiptData.year}`}
+                      : receiptData.invoiceType === "FULLDAY"
+                      ? `Biaya Fullday Bulanan - ${MONTHS.find(m => m.value === receiptData.month)?.name} ${receiptData.year}`
+                      : `${getInvoiceTypeName(receiptData.invoiceType)} ${receiptData.year}`}
                   </span>
                 </div>
 
@@ -1398,7 +1415,7 @@ export default function PaymentsPage() {
                   <span className="col-span-4 text-slate-400 font-semibold">Terbilang</span>
                   <span className="col-span-1 text-slate-500">:</span>
                   <span className="col-span-7 italic font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                    {formatTerbilang(Number(paymentAmount))}
+                    {formatTerbilang(receiptData.paidAmount || receiptData.amount || 0)}
                   </span>
                 </div>
               </div>
@@ -1415,7 +1432,7 @@ export default function PaymentsPage() {
                 </div>
                 <div className="text-right">
                   <span className="text-2xl font-black text-emerald-400 font-mono tracking-tight">
-                    {formatRupiah(Number(paymentAmount))}
+                    {formatRupiah(receiptData.paidAmount || receiptData.amount || 0)}
                   </span>
                 </div>
               </div>
