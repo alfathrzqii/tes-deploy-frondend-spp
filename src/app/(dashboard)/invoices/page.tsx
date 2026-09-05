@@ -88,6 +88,7 @@ export default function InvoicesPage() {
   const [schoolUnitId, setSchoolUnitId] = useState("");
   const [month, setMonth] = useState("");
   const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [invoiceType, setInvoiceType] = useState("");
 
   // Pagination States
   const [page, setPage] = useState(1);
@@ -107,6 +108,7 @@ export default function InvoicesPage() {
 
       if (search) params.search = search;
       if (status) params.status = status;
+      if (invoiceType) params.invoiceType = invoiceType;
       if (month) params.month = parseInt(month);
 
       if (isUnitAdmin) {
@@ -128,11 +130,11 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, status, schoolUnitId, month, year]);
+  }, [search, status, invoiceType, schoolUnitId, month, year]);
 
   useEffect(() => {
     fetchInvoices();
-  }, [page, search, status, schoolUnitId, month, year]);
+  }, [page, search, status, invoiceType, schoolUnitId, month, year]);
 
   const handleUpdateStatus = async (id: number, targetStatus: "PAID" | "PENDING") => {
     const actionText = targetStatus === "PAID" ? "melunasi" : "membatalkan pelunasan";
@@ -588,7 +590,7 @@ export default function InvoicesPage() {
           <span className="text-white">Filter Invoice</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {/* Search bar */}
           <div className="space-y-1.5">
             <label className="font-semibold text-slate-400 block">Cari Siswa</label>
@@ -604,6 +606,25 @@ export default function InvoicesPage() {
             </div>
           </div>
 
+          {/* Invoice Type selection */}
+          <div className="space-y-1.5">
+            <label className="font-semibold text-slate-400 block">Jenis Tagihan</label>
+            <select
+              value={invoiceType}
+              onChange={(e) => setInvoiceType(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="">Semua Jenis</option>
+              <option value="SPP">SPP Bulanan</option>
+              <option value="UANG_PENGEMBANGAN">Uang Pengembangan</option>
+              <option value="EKSTRAKURIKULER">Ekstrakurikuler</option>
+              <option value="DAFTAR_ULANG">Daftar Ulang</option>
+              <option value="UANG_PERALATAN">Uang Peralatan</option>
+              <option value="SERAGAM">Uang Seragam</option>
+              <option value="FULLDAY">Fullday</option>
+            </select>
+          </div>
+
           {/* Unit selection */}
           {!isUnitAdmin && (
             <div className="space-y-1.5">
@@ -611,7 +632,7 @@ export default function InvoicesPage() {
               <select
                 value={schoolUnitId}
                 onChange={(e) => setSchoolUnitId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer"
               >
                 <option value="">Semua Unit</option>
                 {SCHOOL_UNITS.map((u) => (
@@ -629,7 +650,7 @@ export default function InvoicesPage() {
             <select
               value={month}
               onChange={(e) => setMonth(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+              className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               <option value="">Semua Bulan</option>
               {MONTHS.map((m) => (
@@ -659,7 +680,7 @@ export default function InvoicesPage() {
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+              className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               <option value="">Semua Status</option>
               <option value="PAID">Lunas</option>
@@ -669,11 +690,12 @@ export default function InvoicesPage() {
         </div>
 
         {/* Clear filter indicator */}
-        {(search || status || schoolUnitId || month || year !== String(new Date().getFullYear())) && (
+        {(search || status || invoiceType || schoolUnitId || month || year !== String(new Date().getFullYear())) && (
           <button
             onClick={() => {
               setSearch("");
               setStatus("");
+              setInvoiceType("");
               setSchoolUnitId("");
               setMonth("");
               setYear(String(new Date().getFullYear()));

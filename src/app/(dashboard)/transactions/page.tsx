@@ -71,6 +71,7 @@ export default function TransactionsPage() {
   // Filters State
   const [filterUnitId, setFilterUnitId] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [filterCategoryId, setFilterCategoryId] = useState<string>("all");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [filterMethod, setFilterMethod] = useState<string>("all");
@@ -120,6 +121,10 @@ export default function TransactionsPage() {
         params.type = filterType;
       }
 
+      if (filterCategoryId !== "all") {
+        params.categoryId = Number(filterCategoryId);
+      }
+
       if (filterStartDate) {
         params.startDate = filterStartDate;
       }
@@ -144,7 +149,7 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     fetchTransactions();
-  }, [filterUnitId, filterType, filterStartDate, filterEndDate]);
+  }, [filterUnitId, filterType, filterCategoryId, filterStartDate, filterEndDate]);
 
   // Handle open create modal
   const openCreateModal = () => {
@@ -416,7 +421,7 @@ export default function TransactionsPage() {
           <span className="font-semibold text-white">Filter Jurnal Buku Kas</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {/* Unit selection (Only for SUPER_ADMIN) */}
           {!isUnitAdmin && (
             <div className="space-y-1">
@@ -424,7 +429,7 @@ export default function TransactionsPage() {
               <select
                 value={filterUnitId}
                 onChange={(e) => setFilterUnitId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 text-slate-300 px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-950 border border-slate-800 text-slate-300 px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer"
               >
                 <option value="all">Semua Unit</option>
                 {SCHOOL_UNITS.map((u) => (
@@ -441,12 +446,34 @@ export default function TransactionsPage() {
             <label className="font-medium text-slate-400 block">Tipe Jurnal</label>
             <select
               value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 text-slate-300 px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+              onChange={(e) => {
+                setFilterType(e.target.value);
+                setFilterCategoryId("all"); // Reset category if type changes to avoid mismatch
+              }}
+              className="w-full bg-slate-950 border border-slate-800 text-slate-300 px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               <option value="all">Semua Transaksi</option>
               <option value="INCOME">Hanya Pemasukan</option>
               <option value="EXPENSE">Hanya Pengeluaran</option>
+            </select>
+          </div>
+
+          {/* Category / Sumber Dana selection */}
+          <div className="space-y-1">
+            <label className="font-medium text-slate-400 block">Kategori / Sumber Dana</label>
+            <select
+              value={filterCategoryId}
+              onChange={(e) => setFilterCategoryId(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 text-slate-300 px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="all">Semua Kategori</option>
+              {categories
+                .filter((cat) => (filterType === "all" ? true : cat.type === filterType))
+                .map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name} ({cat.type === "INCOME" ? "Masuk" : "Keluar"})
+                  </option>
+                ))}
             </select>
           </div>
 
@@ -456,10 +483,10 @@ export default function TransactionsPage() {
             <select
               value={filterMethod}
               onChange={(e) => setFilterMethod(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 text-slate-300 px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+              className="w-full bg-slate-950 border border-slate-800 text-slate-300 px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               <option value="all">Semua Metode</option>
-              <option value="online">Online</option>
+              <option value="online">Online (QRIS / Gateway)</option>
               <option value="cash">Cash (Tunai / Manual)</option>
             </select>
           </div>
@@ -492,11 +519,12 @@ export default function TransactionsPage() {
         </div>
 
         {/* Reset filters button */}
-        {(filterUnitId !== "all" || filterType !== "all" || filterStartDate || filterEndDate || filterMethod !== "all") && (
+        {(filterUnitId !== "all" || filterType !== "all" || filterCategoryId !== "all" || filterStartDate || filterEndDate || filterMethod !== "all") && (
           <button
             onClick={() => {
               setFilterUnitId("all");
               setFilterType("all");
+              setFilterCategoryId("all");
               setFilterStartDate("");
               setFilterEndDate("");
               setFilterMethod("all");

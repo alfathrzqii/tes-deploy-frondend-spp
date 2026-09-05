@@ -10,12 +10,14 @@ import {
   Filter,
   Users,
   DollarSign,
-  Send,
   MessageCircle,
   FileSpreadsheet,
   CheckCircle2,
-  TrendingDown
+  TrendingDown,
+  Layers,
+  Sparkles
 } from "lucide-react";
+import { SCHOOL_UNITS, ALL_PRESET_CLASSES, getClassesByUnitId } from "@/lib/classConstants";
 
 interface UnpaidStudent {
   id: number;
@@ -27,6 +29,13 @@ interface UnpaidStudent {
   parentName: string;
   parentPhoneNumber: string;
   parentEmail: string | null;
+  invoiceType?: string;
+  baseAmount?: number;
+  discountApplied?: number;
+  totalAmount?: number;
+  paidAmount?: number;
+  unpaidAmount?: number;
+  status?: string;
   unpaidMonths: {
     month: number;
     status: string;
@@ -52,7 +61,15 @@ const MONTHS = [
   { value: 12, name: "Desember" },
 ];
 
-import { SCHOOL_UNITS, ALL_PRESET_CLASSES, getClassesByUnitId } from "@/lib/classConstants";
+const INVOICE_TYPES = [
+  { value: "SPP", label: "SPP Bulanan" },
+  { value: "UANG_PENGEMBANGAN", label: "Uang Pengembangan" },
+  { value: "EKSTRAKURIKULER", label: "Ekstrakurikuler" },
+  { value: "DAFTAR_ULANG", label: "Daftar Ulang" },
+  { value: "UANG_PERALATAN", label: "Uang Peralatan" },
+  { value: "SERAGAM", label: "Uang Seragam" },
+  { value: "FULLDAY", label: "Fullday Bulanan" },
+];
 
 export default function UnpaidPage() {
   const { user } = useAuthStore();
@@ -67,7 +84,8 @@ export default function UnpaidPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filter States initialized from URL search params if present
+  // Filter States
+  const [filterInvoiceType, setFilterInvoiceType] = useState<string>("SPP");
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
   const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth() + 1);
   const [filterUnitId, setFilterUnitId] = useState<string>(searchParams.get("schoolUnitId") || "all");
@@ -76,12 +94,14 @@ export default function UnpaidPage() {
   const isUnitAdmin = user?.role === "UNIT_ADMIN";
   const isWaliKelas = user?.role === "WALI_KELAS";
 
+  const isMonthlyType = filterInvoiceType === "SPP" || filterInvoiceType === "FULLDAY";
+
   // Sync state if searchParams change
   useEffect(() => {
     const qUnitId = searchParams.get("schoolUnitId");
     const qClassName = searchParams.get("className");
-    setFilterUnitId(qUnitId || "all");
-    setFilterClass(qClassName || "");
+    if (qUnitId) setFilterUnitId(qUnitId);
+    if (qClassName) setFilterClass(qClassName);
   }, [searchParams]);
 
   const fetchUnpaidInvoices = async () => {
@@ -89,9 +109,13 @@ export default function UnpaidPage() {
     setError(null);
     try {
       const params: any = {
+        invoiceType: filterInvoiceType,
         year: filterYear,
-        upToMonth: filterMonth,
       };
+
+      if (isMonthlyType) {
+        params.upToMonth = filterMonth;
+      }
 
       // Role boundary constraints passed as query params
       if (isWaliKelas) {
@@ -106,10 +130,15 @@ export default function UnpaidPage() {
       }
 
       const response = await api.get("/invoices/unpaid", { params });
-      setUnpaidData(response.data.data.unpaidList);
-      setSummary(response.data.data.summary);
+      setUnpaidData(response.data.data.unpaidList || []);
+      setSummary(response.data.data.summary || {
+        grandTotalUnpaidAmount: 0,
+        grandTotalUnpaidMonthsCount: 0,
+        totalStudentsCount: 0,
+        totalStudentsUnpaidCount: 0,
+      });
     } catch (err: any) {
-      setError(err.response?.data?.message || "Gagal mengambil daftar tunggakan SPP");
+      setError(err.response?.data?.message || "Gagal mengambil daftar tunggakan siswa");
     } finally {
       setLoading(false);
     }
@@ -117,10 +146,14 @@ export default function UnpaidPage() {
 
   useEffect(() => {
     fetchUnpaidInvoices();
-  }, [filterYear, filterMonth, filterUnitId, filterClass]);
+  }, [filterInvoiceType, filterYear, filterMonth, filterUnitId, filterClass]);
 
   const getMonthName = (m: number) => {
     return MONTHS.find((item) => item.value === m)?.name || m.toString();
+  };
+
+  const getInvoiceTypeLabel = (val: string) => {
+    return INVOICE_TYPES.find((t) => t.value === val)?.label || val;
   };
 
   const formatRupiah = (value: number) => {
@@ -133,27 +166,51 @@ export default function UnpaidPage() {
 
   // WhatsApp reminder message builder
   const handleSendReminder = (student: UnpaidStudent) => {
-    const monthsText = student.unpaidMonths
-      .map((item) => `${getMonthName(item.month)} ${filterYear}`)
-      .join(", ");
-    
     const rawPhoneNumber = student.parentPhoneNumber.trim();
-    // Normalize Indonesian phone numbers to country code format e.g. 628xxxx
     let formattedPhone = rawPhoneNumber.replace(/[^0-9]/g, "");
     if (formattedPhone.startsWith("0")) {
       formattedPhone = "62" + formattedPhone.slice(1);
     }
 
-    const messageText = `Halo Bapak/Ibu ${student.parentName},
+    const typeLabel = getInvoiceTypeLabel(student.invoiceType || filterInvoiceType);
+    let messageText = "";
 
-Mengingatkan kembali perihal tagihan SPP sekolah putra/putri Anda yang bernama *${student.name}* (Kelas ${student.className} - Unit ${student.schoolUnitName}).
+    if (isMonthlyType) {
+      const monthsText = student.unpaidMonths
+        .map((item) => `${getMonthName(item.month)} ${filterYear}`)
+        .join(", ");
 
-Saat ini terdapat tunggakan SPP untuk periode *${monthsText}* dengan total tagihan sebesar *${formatRupiah(student.totalUnpaidAmount)}*.
+      messageText = `Halo Bapak/Ibu ${student.parentName},
 
-Pembayaran dapat segera diselesaikan di loket administrasi sekolah secara tunai, atau melalui transfer bank online. Jika Bapak/Ibu memerlukan kelonggaran waktu atau informasi detail cicilan, silakan hubungi bendahara sekolah.
+Mengingatkan kembali perihal tagihan *${typeLabel}* sekolah putra/putri Anda yang bernama *${student.name}* (Kelas ${student.className} - Unit ${student.schoolUnitName}).
+
+Saat ini terdapat tunggakan ${typeLabel} untuk periode *${monthsText}* dengan total tagihan sebesar *${formatRupiah(student.totalUnpaidAmount)}*.
+
+Pembayaran dapat segera diselesaikan di loket administrasi sekolah secara tunai, atau melalui transfer bank online. Jika Bapak/Ibu memerlukan kelonggaran waktu atau informasi detail, silakan hubungi bendahara sekolah.
 
 Terima kasih atas perhatian dan kerja samanya.
-_Sistem Keuangan Sekolah SPP_`;
+_Sistem Keuangan Sekolah_`;
+    } else {
+      const totalAmountVal = student.totalAmount || student.totalUnpaidAmount;
+      const paidVal = student.paidAmount || 0;
+      const remainingVal = student.totalUnpaidAmount;
+
+      const rincianText = paidVal > 0
+        ? `• Total Biaya: *${formatRupiah(totalAmountVal)}*\n• Sudah Dibayar: *${formatRupiah(paidVal)}*\n• Sisa Tunggakan: *${formatRupiah(remainingVal)}*`
+        : `• Total Tagihan: *${formatRupiah(remainingVal)}*`;
+
+      messageText = `Halo Bapak/Ibu ${student.parentName},
+
+Mengingatkan kembali perihal tagihan *${typeLabel}* putra/putri Anda yang bernama *${student.name}* (Kelas ${student.className} - Unit ${student.schoolUnitName}) Tahun ${filterYear}.
+
+Rincian status pembayaran:
+${rincianText}
+
+Pembayaran dapat segera diselesaikan di loket administrasi sekolah secara tunai atau melalui transfer online. Jika Bapak/Ibu membutuhkan informasi mengenai cicilan atau konfirmasi pembayaran, silakan hubungi pihak sekolah.
+
+Terima kasih atas perhatian dan kerja samanya.
+_Sistem Keuangan Sekolah_`;
+    }
 
     const encodedText = encodeURIComponent(messageText);
     const waUrl = `https://wa.me/${formattedPhone}?text=${encodedText}`;
@@ -162,41 +219,64 @@ _Sistem Keuangan Sekolah SPP_`;
 
   // Client-side CSV export for unpaid list
   const handleExportCsv = () => {
-    const headers = ["NIS", "Nama Siswa", "Kelas", "Unit", "Nama Wali", "No HP Wali", "Bulan Menunggak", "Total Nominal Tunggakan"];
-    const rows = unpaidData.map(s => [
-      s.studentNumber,
-      s.name,
-      s.className,
-      s.schoolUnitName,
-      s.parentName,
-      s.parentPhoneNumber,
-      s.unpaidMonths.map(item => getMonthName(item.month)).join(" | "),
-      s.totalUnpaidAmount
-    ]);
+    let headers: string[] = [];
+    let rows: any[][] = [];
 
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(","))].join("\n");
+    const typeLabel = getInvoiceTypeLabel(filterInvoiceType);
+
+    if (isMonthlyType) {
+      headers = ["NIS", "Nama Siswa", "Kelas", "Unit", "Jenis Tagihan", "Nama Wali", "No HP Wali", "Bulan Menunggak", "Total Tunggakan"];
+      rows = unpaidData.map((s) => [
+        s.studentNumber,
+        s.name,
+        s.className,
+        s.schoolUnitName,
+        typeLabel,
+        s.parentName,
+        s.parentPhoneNumber,
+        s.unpaidMonths.map((item) => getMonthName(item.month)).join(" | "),
+        s.totalUnpaidAmount,
+      ]);
+    } else {
+      headers = ["NIS", "Nama Siswa", "Kelas", "Unit", "Jenis Tagihan", "Nama Wali", "No HP Wali", "Total Biaya", "Sudah Terbayar", "Sisa Tunggakan", "Status"];
+      rows = unpaidData.map((s) => [
+        s.studentNumber,
+        s.name,
+        s.className,
+        s.schoolUnitName,
+        typeLabel,
+        s.parentName,
+        s.parentPhoneNumber,
+        s.totalAmount || s.totalUnpaidAmount,
+        s.paidAmount || 0,
+        s.totalUnpaidAmount,
+        s.status === "PARTIALLY_PAID" ? "Dicicil Sebagian" : "Belum Bayar",
+      ]);
+    }
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((e) => e.map((val) => `"${val.toString().replace(/"/g, '""')}"`).join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    
+
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Daftar_Tunggakan_SPP_${new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute("download", `Daftar_Tunggakan_${filterInvoiceType}_${new Date().toISOString().split("T")[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   return (
-    <div className="space-y-6 relative text-xs">
+    <div className="space-y-6 relative text-xs pb-12">
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
             <TrendingDown className="w-5 h-5 text-indigo-400" />
-            Laporan Tunggakan SPP (Belum Bayar)
+            Laporan Tunggakan Biaya Sekolah (Belum Bayar)
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Data rekap siswa yang belum melunasi tagihan SPP bulanan serta pengiriman WhatsApp pengingat otomatis.
+            Data rekap siswa yang belum melunasi tagihan {getInvoiceTypeLabel(filterInvoiceType)}, rincian cicilan, serta pengiriman WhatsApp pengingat otomatis.
           </p>
         </div>
 
@@ -206,7 +286,7 @@ _Sistem Keuangan Sekolah SPP_`;
           className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold shadow-md transition-all cursor-pointer disabled:opacity-50 self-start sm:self-auto"
         >
           <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-          Export Daftar Tunggakan
+          Export Daftar Tunggakan ({getInvoiceTypeLabel(filterInvoiceType)})
         </button>
       </div>
 
@@ -244,19 +324,23 @@ _Sistem Keuangan Sekolah SPP_`;
 
         <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-xl flex items-center justify-between backdrop-blur-md">
           <div className="space-y-1">
-            <p className="text-[10px] font-bold text-slate-400 uppercase">Total Bulan Tunggakan</p>
-            <p className="text-lg font-black text-amber-400 tracking-tight">{summary.grandTotalUnpaidMonthsCount} bulan</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase">
+              {isMonthlyType ? "Total Bulan Tunggakan" : "Jenis Tagihan"}
+            </p>
+            <p className="text-lg font-black text-amber-400 tracking-tight">
+              {isMonthlyType ? `${summary.grandTotalUnpaidMonthsCount} bulan` : getInvoiceTypeLabel(filterInvoiceType)}
+            </p>
           </div>
           <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400">
-            <Calendar className="w-5 h-5" />
+            {isMonthlyType ? <Calendar className="w-5 h-5" /> : <Layers className="w-5 h-5" />}
           </div>
         </div>
 
         <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-xl flex items-center justify-between backdrop-blur-md">
           <div className="space-y-1">
-            <p className="text-[10px] font-bold text-slate-400 uppercase">Rasio Ketepatan SPP</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase">Tingkat Kelunasan</p>
             <p className="text-lg font-black text-emerald-400 tracking-tight">
-              {summary.totalStudentsCount > 0 
+              {summary.totalStudentsCount > 0
                 ? Math.max(0, Math.round(((summary.totalStudentsCount - summary.totalStudentsUnpaidCount) / summary.totalStudentsCount) * 100))
                 : 0}%
             </p>
@@ -269,34 +353,61 @@ _Sistem Keuangan Sekolah SPP_`;
 
       {/* Filter and Period Selection Box */}
       <div className="bg-slate-900/40 border border-slate-800/80 p-4 rounded-xl flex flex-col lg:flex-row items-center justify-between gap-4 backdrop-blur-md">
-        
-        {/* Period selection filters */}
+        {/* Period and Type selection filters */}
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <div className="flex items-center gap-1">
-            <Calendar className="w-3.5 h-3.5 text-slate-500" />
-            <span className="text-[11px] text-slate-400">Hingga Periode:</span>
+          {/* Jenis Tagihan Dropdown */}
+          <div className="flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="text-[11px] text-slate-300 font-semibold">Jenis Tagihan:</span>
           </div>
 
           <select
-            value={filterMonth}
-            onChange={(e) => setFilterMonth(Number(e.target.value))}
-            className="bg-slate-950 border border-slate-800 text-slate-300 px-3 py-1.5 rounded-lg text-[11px] focus:outline-none focus:border-indigo-500 transition-colors"
+            value={filterInvoiceType}
+            onChange={(e) => setFilterInvoiceType(e.target.value)}
+            className="bg-indigo-950/40 border border-indigo-500/40 text-indigo-300 font-semibold px-3 py-1.5 rounded-lg text-[11px] focus:outline-none focus:border-indigo-400 transition-colors cursor-pointer"
           >
-            {MONTHS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.name}
+            {INVOICE_TYPES.map((t) => (
+              <option key={t.value} value={t.value} className="bg-slate-900 text-white">
+                {t.label}
               </option>
             ))}
           </select>
 
-          <input
-            type="number"
-            min="2000"
-            max="9999"
-            value={filterYear}
-            onChange={(e) => setFilterYear(Number(e.target.value))}
-            className="bg-slate-950 border border-slate-800 text-slate-350 px-2 py-1.5 rounded-lg text-[11px] w-20 text-center focus:outline-none focus:border-indigo-500 transition-colors"
-          />
+          {/* Month selector only for monthly bills (SPP / Fullday) */}
+          {isMonthlyType ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-400">Hingga:</span>
+              <select
+                value={filterMonth}
+                onChange={(e) => setFilterMonth(Number(e.target.value))}
+                className="bg-slate-950 border border-slate-800 text-slate-300 px-3 py-1.5 rounded-lg text-[11px] focus:outline-none focus:border-indigo-500 transition-colors"
+              >
+                {MONTHS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-800/40 px-2.5 py-1 rounded-md border border-slate-800">
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              <span>Tagihan Berkala / Tahunan</span>
+            </div>
+          )}
+
+          {/* Year selector */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-400">Tahun:</span>
+            <input
+              type="number"
+              min="2000"
+              max="9999"
+              value={filterYear}
+              onChange={(e) => setFilterYear(Number(e.target.value))}
+              className="bg-slate-950 border border-slate-800 text-slate-350 px-2 py-1.5 rounded-lg text-[11px] w-20 text-center focus:outline-none focus:border-indigo-500 transition-colors"
+            />
+          </div>
         </div>
 
         {/* School unit / class filters */}
@@ -312,7 +423,7 @@ _Sistem Keuangan Sekolah SPP_`;
               value={filterUnitId}
               onChange={(e) => {
                 setFilterUnitId(e.target.value);
-                setFilterClass(""); // Reset class when unit changes to prevent cross-unit leaks
+                setFilterClass(""); // Reset class when unit changes
               }}
               className="bg-slate-950 border border-slate-800 text-slate-300 px-3 py-1.5 rounded-lg text-[11px] focus:outline-none focus:border-indigo-500 transition-colors"
             >
@@ -351,11 +462,11 @@ _Sistem Keuangan Sekolah SPP_`;
         <div className="overflow-x-auto">
           {loading ? (
             <div className="p-12 text-center text-slate-500 animate-pulse">
-              Menganalisis data tunggakan siswa...
+              Menganalisis data tunggakan siswa untuk {getInvoiceTypeLabel(filterInvoiceType)}...
             </div>
           ) : unpaidData.length === 0 ? (
             <div className="p-12 text-center text-slate-500">
-              Luar biasa! Tidak ada data tunggakan SPP ditemukan untuk periode filter ini.
+              Luar biasa! Tidak ada data tunggakan {getInvoiceTypeLabel(filterInvoiceType)} ditemukan untuk periode filter ini.
             </div>
           ) : (
             <table className="w-full text-left border-collapse">
@@ -364,8 +475,19 @@ _Sistem Keuangan Sekolah SPP_`;
                   <th className="px-6 py-4">NIS</th>
                   <th className="px-6 py-4">Nama Siswa</th>
                   <th className="px-6 py-4">Unit / Kelas</th>
-                  <th className="px-6 py-4">Bulan Menunggak</th>
-                  <th className="px-6 py-4">Total Tunggakan</th>
+                  {isMonthlyType ? (
+                    <>
+                      <th className="px-6 py-4">Bulan Menunggak</th>
+                      <th className="px-6 py-4">Total Tunggakan</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-6 py-4">Total Biaya</th>
+                      <th className="px-6 py-4">Sudah Terbayar</th>
+                      <th className="px-6 py-4">Sisa Tunggakan</th>
+                      <th className="px-6 py-4">Status</th>
+                    </>
+                  )}
                   <th className="px-6 py-4">Wali Murid</th>
                   <th className="px-6 py-4 text-right">Aksi</th>
                 </tr>
@@ -392,26 +514,55 @@ _Sistem Keuangan Sekolah SPP_`;
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 max-w-xs">
-                      <div className="flex flex-wrap gap-1">
-                        {student.unpaidMonths.map((item) => (
+
+                    {isMonthlyType ? (
+                      <>
+                        <td className="px-6 py-4 max-w-xs">
+                          <div className="flex flex-wrap gap-1">
+                            {student.unpaidMonths.map((item) => (
+                              <span
+                                key={item.month}
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-semibold border ${
+                                  item.status === "PARTIALLY_PAID"
+                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                    : "bg-red-500/10 text-red-400 border-red-500/20"
+                                }`}
+                                title={item.status === "PARTIALLY_PAID" ? "Telah dicicil sebagian" : "Belum dibayar"}
+                              >
+                                {getMonthName(item.month)} {item.status === "PARTIALLY_PAID" ? " (Parsial)" : ""}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-extrabold text-rose-400 font-mono">
+                          {formatRupiah(student.totalUnpaidAmount)}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-6 py-4 font-mono font-semibold text-slate-300">
+                          {formatRupiah(student.totalAmount || student.totalUnpaidAmount)}
+                        </td>
+                        <td className="px-6 py-4 font-mono font-semibold text-emerald-400">
+                          {formatRupiah(student.paidAmount || 0)}
+                        </td>
+                        <td className="px-6 py-4 font-mono font-extrabold text-rose-400">
+                          {formatRupiah(student.totalUnpaidAmount)}
+                        </td>
+                        <td className="px-6 py-4">
                           <span
-                            key={item.month}
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-semibold border ${
-                              item.status === "PARTIALLY_PAID"
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                              student.status === "PARTIALLY_PAID"
                                 ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                                : "bg-red-500/10 text-red-400 border-red-500/20"
+                                : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                             }`}
-                            title={item.status === "PARTIALLY_PAID" ? "Telah dicicil sebagian" : "Belum dibayar"}
                           >
-                            {getMonthName(item.month)} {item.status === "PARTIALLY_PAID" ? " (Parsial)" : ""}
+                            {student.status === "PARTIALLY_PAID" ? "Dicicil Sebagian" : "Belum Bayar"}
                           </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 font-extrabold text-rose-400 font-mono">
-                      {formatRupiah(student.totalUnpaidAmount)}
-                    </td>
+                        </td>
+                      </>
+                    )}
+
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="font-semibold text-slate-300">{student.parentName}</span>
