@@ -27,7 +27,6 @@ import {
   ArrowRight,
   RefreshCw,
   Layers,
-  Zap,
   Printer,
 } from "lucide-react";
 import { printOfficialReceipt } from "@/lib/receiptPrinter";
@@ -89,7 +88,6 @@ export default function DashboardPage() {
   const [pakasirData, setPakasirData] = useState<any | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number>(0);
   const [syncingChild, setSyncingChild] = useState<string | null>(null);
-  const [simulatingPayment, setSimulatingPayment] = useState<boolean>(false);
 
   const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "UNIT_ADMIN";
 
@@ -319,29 +317,6 @@ export default function DashboardPage() {
 
   const handleWhatsAppRedirect = () => {
     window.open(getWhatsAppLink(), "_blank");
-  };
-
-  const handleSimulatePakasirPayment = async () => {
-    if (!pakasirData?.orderId) return;
-    setSimulatingPayment(true);
-    try {
-      const response = await api.post("/invoices/pakasir/simulate", {
-        orderId: pakasirData.orderId,
-        amount: pakasirData.amount || (selectedInvoice ? selectedInvoice.amount : 0),
-      });
-
-      if (response.data.success) {
-        setPaymentSuccess(true);
-        await loadParentDashboard();
-      } else {
-        alert(response.data.message || "Gagal memicu simulasi pembayaran");
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert(err.response?.data?.message || "Gagal memicu simulasi pembayaran");
-    } finally {
-      setSimulatingPayment(false);
-    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -1243,32 +1218,6 @@ export default function DashboardPage() {
                             <p className="text-[9px] text-slate-500 leading-normal max-w-xs">
                               Pindai kode QRIS di atas dengan GoPay, OVO, Dana, ShopeePay, BCA, Mandiri, atau Mobile Banking lainnya. Status akan terverifikasi otomatis.
                             </p>
-
-                            {/* Trigger Simulasi QRIS Terbayar untuk Testing */}
-                            <div className="w-full pt-3 border-t border-slate-200/80 mt-1 space-y-1">
-                              <button
-                                type="button"
-                                onClick={handleSimulatePakasirPayment}
-                                disabled={simulatingPayment || pakasirLoading}
-                                className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                                title="Tes Fitur: Simulasikan transaksi QRIS Pakasir ini telah dibayar sukses"
-                              >
-                                {simulatingPayment ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    <span>Memproses Simulasi Lunas...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Zap className="w-4 h-4 fill-white" />
-                                    <span>⚡ [Tes Fitur] Simulasi QRIS Terbayar (Pakasir Sukses)</span>
-                                  </>
-                                )}
-                              </button>
-                              <p className="text-[9.5px] text-slate-400 text-center">
-                                Klik tombol di atas untuk menguji alur verifikasi otomatis tanpa perlu transfer uang sungguhan.
-                              </p>
-                            </div>
                           </>
                         ) : (
                           <div className="py-6 text-slate-500 text-xs">
@@ -1316,32 +1265,6 @@ export default function DashboardPage() {
                             <p className="text-[9px] text-slate-500 leading-normal">
                               Gunakan nomor Virtual Account di atas untuk transfer melalui ATM, Mobile Banking, atau Internet Banking Anda.
                             </p>
-
-                            {/* Trigger Simulasi VA Terbayar untuk Testing */}
-                            <div className="w-full pt-3 border-t border-slate-200/80 mt-1 space-y-1">
-                              <button
-                                type="button"
-                                onClick={handleSimulatePakasirPayment}
-                                disabled={simulatingPayment || pakasirLoading}
-                                className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                                title="Tes Fitur: Simulasikan transfer VA Pakasir ini telah dibayar sukses"
-                              >
-                                {simulatingPayment ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    <span>Memproses Simulasi Lunas...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Zap className="w-4 h-4 fill-white" />
-                                    <span>⚡ [Tes Fitur] Simulasi VA Terbayar (Pakasir Sukses)</span>
-                                  </>
-                                )}
-                              </button>
-                              <p className="text-[9.5px] text-slate-400 text-center">
-                                Klik tombol di atas untuk menguji alur verifikasi otomatis tanpa perlu transfer uang sungguhan.
-                              </p>
-                            </div>
                           </>
                         )}
                       </div>

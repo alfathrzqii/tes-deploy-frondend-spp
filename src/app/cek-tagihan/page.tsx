@@ -22,7 +22,6 @@ import {
   Building2,
   Wallet,
   ArrowRight,
-  Zap,
   Printer,
   Download
 } from "lucide-react";
@@ -390,28 +389,6 @@ export default function CekTagihanPage() {
     } catch (err: any) {
       console.error(err);
       alert(err.response?.data?.message || "Gagal memeriksa status pembayaran");
-    } finally {
-      setProcessingPayment(false);
-    }
-  };
-
-  const handleSimulatePakasirPayment = async () => {
-    if (!pakasirData) return;
-    setProcessingPayment(true);
-    try {
-      const response = await api.post("/invoices/pakasir/simulate", {
-        orderId: pakasirData.orderId,
-        amount: pakasirData.amount,
-      });
-
-      if (response.data.success) {
-        await handleCheckStatusManual();
-      } else {
-        alert(response.data.message || "Gagal memicu simulasi lunas");
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert(err.response?.data?.message || "Gagal memicu simulasi lunas");
     } finally {
       setProcessingPayment(false);
     }
@@ -1529,17 +1506,6 @@ export default function CekTagihanPage() {
                           ) : (
                             <span>Cek Status Pembayaran</span>
                           )}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleSimulatePakasirPayment}
-                          disabled={processingPayment || pakasirLoading || !pakasirData || secondsLeft === 0}
-                          className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
-                          title="Tes Fitur: Simulasikan pembayaran QRIS/VA Pakasir ini telah sukses terbayar"
-                        >
-                          <Zap className="w-3.5 h-3.5 fill-white" />
-                          <span>⚡ [Tes Fitur] Simulasi QRIS Terbayar (Pakasir Sukses)</span>
                         </button>
                       </>
                     )}
