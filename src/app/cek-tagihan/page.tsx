@@ -21,8 +21,11 @@ import {
   QrCode,
   Building2,
   Wallet,
-  ArrowRight
+  ArrowRight,
+  Zap,
+  Printer
 } from "lucide-react";
+import { printBatchReceipt } from "@/lib/receiptPrinter";
 
 interface StudentInfo {
   id: number;
@@ -411,6 +414,45 @@ export default function CekTagihanPage() {
     } finally {
       setProcessingPayment(false);
     }
+  };
+
+  const handlePrintSuccessReceipt = () => {
+    if (!student || selectedInvoicesList.length === 0) return;
+
+    const methodLabel = paymentMethod === "tf_manual"
+      ? "Transfer Manual (BSI)"
+      : paymentMethod === "qris"
+      ? "QRIS (Pakasir Gateway)"
+      : `${paymentMethod.replace("_", " ").toUpperCase()} (Pakasir Gateway)`;
+
+    const total = selectedInvoicesList.reduce((sum, inv) => sum + inv.amount, 0);
+    const orderId = pakasirData?.orderId || `BATCH-${student.studentNumber}-${Date.now()}`;
+
+    const items = selectedInvoicesList.map((inv) => {
+      let desc = inv.invoiceType;
+      if (inv.invoiceType === "SPP") desc = `SPP Bulanan ${INDONESIAN_MONTHS[inv.month]} ${inv.year}`;
+      else if (inv.invoiceType === "FULLDAY") desc = `Uang Fullday ${INDONESIAN_MONTHS[inv.month]} ${inv.year}`;
+      else if (inv.invoiceType === "UANG_PENGEMBANGAN") desc = `Uang Pengembangan Tahun ${inv.year}`;
+      else if (inv.invoiceType === "DAFTAR_ULANG") desc = `Daftar Ulang Tahun ${inv.year}`;
+      else if (inv.invoiceType === "UANG_PERALATAN") desc = `Uang Peralatan Tahun ${inv.year}`;
+      else if (inv.invoiceType === "EKSTRAKURIKULER") desc = `Ekstrakurikuler Tahun ${inv.year}`;
+      else if (inv.invoiceType === "SERAGAM") desc = `Seragam Sekolah Tahun ${inv.year}`;
+      return {
+        name: desc,
+        amount: inv.amount,
+      };
+    });
+
+    printBatchReceipt({
+      receiptNo: `KW-${orderId}`,
+      payerName: student.parent?.name || "Wali Murid",
+      studentName: student.name,
+      studentNis: student.studentNumber,
+      unitAndClass: `Unit ${student.schoolUnit?.name || "Al Uswah"} • Kelas ${student.className}`,
+      paymentMethod: methodLabel,
+      items,
+      totalAmount: total,
+    });
   };
 
   // Polling status Pakasir
@@ -941,15 +983,33 @@ export default function CekTagihanPage() {
             {paymentSuccess ? (
               /* Success screen */
               <div className="p-8 flex flex-col items-center justify-center text-center animate-fadeIn">
-                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 border-2 border-emerald-400 animate-pulse mb-6">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 border-2 border-emerald-400 animate-pulse mb-4">
                   <Check className="w-8 h-8 stroke-[3]" />
                 </div>
                 <h4 className="font-extrabold text-xl text-slate-900">Pembayaran Sukses!</h4>
-                <p className="text-xs text-slate-500 mt-2 max-w-xs">
+                <p className="text-xs text-slate-500 mt-1.5 max-w-xs">
                   Pembayaran untuk {selectedInvoicesList.length} tagihan telah berhasil diproses secara lunas.
                 </p>
 
-                <div className="w-full bg-slate-50 rounded-xl p-4 my-4 text-left border border-slate-100 space-y-2 text-xs max-h-[220px] overflow-y-auto">
+                {/* Banner Pesan: Cetak Kwitansi atau Screenshot */}
+                <div className="w-full bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 rounded-xl p-3.5 my-3 text-left flex items-start gap-3 shadow-sm">
+                  <div className="p-2 bg-amber-100 text-amber-800 rounded-lg shrink-0 mt-0.5">
+                    <Printer className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                      <h5 className="font-extrabold text-amber-950 text-xs">
+                        Penting: Simpan Bukti Pembayaran
+                      </h5>
+                    </div>
+                    <p className="text-[11px] text-amber-900/90 leading-relaxed font-medium">
+                      Silakan <strong>cetak kwitansi</strong> atau <strong>screenshot halaman ini</strong> sebagai bukti pembayaran sah Anda.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="w-full bg-slate-50 rounded-xl p-4 my-2 text-left border border-slate-100 space-y-2 text-xs max-h-[220px] overflow-y-auto">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Order ID</span>
                     <span className="font-mono font-medium text-slate-700">
@@ -990,16 +1050,28 @@ export default function CekTagihanPage() {
 
                   <div className="flex justify-between border-t border-slate-200/80 pt-2 font-bold text-slate-800 text-sm">
                     <span>Total Pembayaran</span>
-                    <span>{formatRupiah(selectedInvoicesList.reduce((sum, inv) => sum + inv.amount, 0))}</span>
+                    <span className="font-mono text-emerald-600 font-extrabold">{formatRupiah(selectedInvoicesList.reduce((sum, inv) => sum + inv.amount, 0))}</span>
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setSnapOpen(false)}
-                  className="w-full bg-slate-950 text-white font-bold text-sm py-3 rounded-xl hover:bg-slate-850 transition-all shadow-lg shadow-slate-900/10 cursor-pointer"
-                >
-                  Kembali Ke Halaman Tagihan
-                </button>
+                <div className="w-full space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={handlePrintSuccessReceipt}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-3 rounded-xl transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Cetak Kwitansi Pembayaran (PDF / Print)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSnapOpen(false)}
+                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition-all cursor-pointer"
+                  >
+                    Kembali Ke Halaman Tagihan
+                  </button>
+                </div>
               </div>
             ) : (
               /* Checkout screens */
@@ -1360,6 +1432,17 @@ export default function CekTagihanPage() {
                           ) : (
                             <span>Cek Status Pembayaran</span>
                           )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleSimulatePakasirPayment}
+                          disabled={processingPayment || pakasirLoading || !pakasirData || secondsLeft === 0}
+                          className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+                          title="Tes Fitur: Simulasikan pembayaran QRIS/VA Pakasir ini telah sukses terbayar"
+                        >
+                          <Zap className="w-3.5 h-3.5 fill-white" />
+                          <span>⚡ [Tes Fitur] Simulasi QRIS Terbayar (Pakasir Sukses)</span>
                         </button>
                       </>
                     )}

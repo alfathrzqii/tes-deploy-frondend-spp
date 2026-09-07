@@ -16,7 +16,8 @@ import {
   Calculator,
   Printer,
   MessageCircle,
-  X
+  X,
+  RefreshCw,
 } from "lucide-react";
 
 interface Student {
@@ -51,6 +52,7 @@ interface InvoiceTransaction {
   amount: number;
   date: string;
   paymentMethod: string;
+  description?: string;
 }
 
 interface DBInvoice {
@@ -64,6 +66,7 @@ interface DBInvoice {
   amount: number;
   status: "PENDING" | "PARTIALLY_PAID" | "PAID" | "VOID";
   transactions: InvoiceTransaction[];
+  midtransOrderId?: string | null;
 }
 
 const MONTHS = [
@@ -109,6 +112,54 @@ function formatTerbilang(amount: number): string {
   return `# ${words} Rupiah #`;
 }
 
+function resolvePaymentMethod(inv: DBInvoice, tx?: InvoiceTransaction | null): "MIDTRANS" | "TRANSFER" | "CASH" {
+  if (tx?.paymentMethod) {
+    const pm = String(tx.paymentMethod).toUpperCase();
+    if (pm === "MIDTRANS" || pm === "ONLINE" || pm === "PAKASIR" || pm === "QRIS") return "MIDTRANS";
+    if (pm === "TRANSFER") return "TRANSFER";
+    if (pm === "CASH") return "CASH";
+  }
+  if (tx?.description && (tx.description.toLowerCase().includes("online") || tx.description.toLowerCase().includes("pakasir"))) {
+    return "MIDTRANS";
+  }
+  if (inv.midtransOrderId) {
+    return "MIDTRANS";
+  }
+  return "CASH";
+}
+
+function getPaymentMethodDetails(method: string, midtransOrderId?: string | null) {
+  const m = String(method || "").toUpperCase();
+  if (m === "MIDTRANS" || m === "ONLINE" || m === "PAKASIR" || m === "QRIS" || Boolean(midtransOrderId)) {
+    return {
+      type: "MIDTRANS",
+      badgeText: "Portal Online (QRIS / Pakasir)",
+      amountTitle: "Jumlah Nominal Pembayaran Online Diterima",
+      methodLabel: "Portal Online (QRIS / Pakasir Gateway)",
+      noteText: "• Simpan kuitansi ini sebagai bukti pembayaran transaksi online (QRIS/Pakasir) yang sah.",
+      badgeColor: "bg-indigo-500/15 text-indigo-400 border-indigo-500/30",
+    };
+  }
+  if (m === "TRANSFER") {
+    return {
+      type: "TRANSFER",
+      badgeText: "Transfer Bank (BSI)",
+      amountTitle: "Jumlah Nominal Transfer Diterima",
+      methodLabel: "Transfer Bank (TF Manual / Rekening BSI)",
+      noteText: "• Simpan kuitansi ini sebagai bukti pembayaran transfer bank yang sah.",
+      badgeColor: "bg-sky-500/15 text-sky-400 border-sky-500/30",
+    };
+  }
+  return {
+    type: "CASH",
+    badgeText: "Tunai / Kasir Loket",
+    amountTitle: "Jumlah Nominal Tunai Diterima",
+    methodLabel: "Tunai / Kasir Loket Offline",
+    noteText: "• Simpan kuitansi ini sebagai bukti pembayaran tunai yang sah.",
+    badgeColor: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  };
+}
+
 export default function PaymentsPage() {
   const { user } = useAuthStore();
   
@@ -126,7 +177,9 @@ export default function PaymentsPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [paymentAmount, setPaymentAmount] = useState<string>("");
-  
+  const [offlinePaymentMethod, setOfflinePaymentMethod] = useState<"CASH" | "TRANSFER">("CASH");
+  const [syncLoading, setSyncLoading] = useState(false);
+
   // Transaction results states
   const [searchLoading, setSearchLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -138,6 +191,28 @@ export default function PaymentsPage() {
   // Print Selection Modal states
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [selectedForPrintKeys, setSelectedForPrintKeys] = useState<string[]>([]);
+
+  const handleSyncPakasir = async () => {
+    setSyncLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const payload: any = {};
+      if (foundStudent) {
+        payload.studentNumber = foundStudent.studentNumber;
+      }
+      const res = await api.post("/invoices/pakasir/sync", payload);
+      setSuccessMsg(res.data.message || "Sinkronisasi status transaksi Pakasir berhasil");
+      if (foundStudent) {
+        const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
+        setStudentInvoices(invResponse.data.data || []);
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Gagal menyinkronkan status transaksi Pakasir");
+    } finally {
+      setSyncLoading(false);
+    }
+  };
 
   // Fetch tariffs on mount to help calculate discounted estimates
   const fetchTariffs = async () => {
@@ -261,19 +336,23 @@ export default function PaymentsPage() {
         year: selectedYear,
         invoiceType,
         paymentAmount: Number(paymentAmount),
+        paymentMethod: offlinePaymentMethod,
       };
 
       const response = await api.post("/invoices/pay-offline", payload);
       const rawData = response.data.data?.invoice || response.data.data || {};
+      const paidVal = Number(paymentAmount) || rawData.amountPaid || rawData.amount || 0;
       const invData = {
         id: rawData.id || rawData.invoiceId || rawData.transactionId || Date.now(),
         invoiceType: rawData.invoiceType || invoiceType,
         month: rawData.month || selectedMonth,
         year: rawData.year || selectedYear,
-        amount: rawData.amount || rawData.amountPaid || Number(paymentAmount),
+        amount: rawData.amount || paidVal,
+        paidAmount: paidVal,
+        paymentMethod: offlinePaymentMethod,
         status: rawData.status || "PAID",
       };
-      setSuccessMsg(response.data.message || "Pembayaran tunai berhasil diproses");
+      setSuccessMsg(response.data.message || (offlinePaymentMethod === "TRANSFER" ? "Pembayaran transfer bank berhasil diverifikasi & diproses" : "Pembayaran tunai berhasil diproses"));
       setReceiptData(invData);
       setShowReceiptModal(true);
       
@@ -285,6 +364,87 @@ export default function PaymentsPage() {
     } finally {
       setSubmitLoading(false);
     }
+  };
+
+  const openReceiptModalForInvoice = (inv: DBInvoice) => {
+    if (!foundStudent) return;
+    const lastTx = inv.transactions && inv.transactions.length > 0 ? inv.transactions[inv.transactions.length - 1] : null;
+    const paidVal = (inv.transactions || []).reduce((sum, tx) => sum + tx.amount, 0) || inv.amount;
+    const method = resolvePaymentMethod(inv, lastTx);
+
+    const invData = {
+      id: inv.id,
+      invoiceType: inv.invoiceType,
+      month: inv.month,
+      year: inv.year,
+      amount: inv.amount,
+      paidAmount: paidVal,
+      paymentMethod: method,
+      status: inv.status,
+      midtransOrderId: inv.midtransOrderId,
+    };
+    setReceiptData(invData);
+    setShowReceiptModal(true);
+  };
+
+  const handlePrintSingleReceipt = () => {
+    const el = document.getElementById("printable-receipt");
+    if (!el || !foundStudent) return;
+    const printWin = window.open("", "_blank");
+    if (!printWin) return;
+    printWin.document.write(`
+      <html>
+        <head>
+          <title>Kwitansi Bukti Pembayaran Resmi - ${foundStudent.name}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+            @page { size: auto; margin: 10mm; }
+            * { box-sizing: border-box; }
+            body { font-family: 'Inter', sans-serif; color: #0f172a; background: #fff; padding: 12px; }
+            .print-border-box { border: 1px solid #cbd5e1; padding: 14px; border-radius: 8px; margin-top: 10px; }
+            .grid { display: grid; }
+            .grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+            .col-span-4 { grid-column: span 4 / span 4; font-weight: 600; color: #475569; }
+            .col-span-1 { grid-column: span 1 / span 1; color: #94a3b8; }
+            .col-span-7 { grid-column: span 7 / span 7; font-weight: 700; color: #0f172a; }
+            .text-right { text-align: right; }
+            .text-center { text-align: center; }
+            .flex { display: flex; }
+            .items-center { align-items: center; }
+            .justify-between { justify-content: space-between; }
+            .gap-2 { gap: 8px; }
+            .gap-3 { gap: 12px; }
+            .gap-4 { gap: 16px; }
+            .font-mono { font-family: monospace; }
+            .font-bold { font-weight: 700; }
+            .font-black { font-weight: 900; }
+            .text-xs { font-size: 11px; }
+            .text-sm { font-size: 13px; }
+            .text-base { font-size: 15px; }
+            .text-2xl { font-size: 20px; }
+            .border-b { border-bottom: 1px solid #cbd5e1; }
+            .border-b-2 { border-bottom: 2px solid #0f172a; }
+            .border-t { border-top: 1px solid #cbd5e1; }
+            .pb-3 { padding-bottom: 10px; }
+            .pt-2 { padding-top: 8px; }
+            .pt-4 { padding-top: 14px; }
+            .mt-1 { margin-top: 4px; }
+            .no-print { display: none !important; }
+          </style>
+        </head>
+        <body>
+          <div style="max-width: 600px; margin: 0 auto; border: 1px solid #94a3b8; padding: 18px; border-radius: 8px;">
+            ${el.innerHTML}
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
   };
 
   const getUnitName = (unitId: number) => {
@@ -394,7 +554,12 @@ export default function PaymentsPage() {
       const itemTx = itemInv.transactions && itemInv.transactions.length > 0 ? itemInv.transactions[itemInv.transactions.length - 1] : null;
       const itemAmountText = formatRupiah(itemInv.amount);
       const itemTerbilang = terbilangFunc(itemInv.amount) ? terbilangFunc(itemInv.amount) + " Rupiah" : "Nol Rupiah";
-      const itemMethod = itemTx?.paymentMethod ? (itemTx.paymentMethod.toUpperCase() === "MIDTRANS" ? "QRIS" : itemTx.paymentMethod) : "CASH";
+      const isOnline = itemTx?.paymentMethod === "MIDTRANS" || Boolean(itemInv.midtransOrderId) || (itemTx?.description && itemTx.description.toLowerCase().includes("online"));
+      const itemMethod = isOnline
+        ? "PORTAL ONLINE (PAKASIR)"
+        : itemTx?.paymentMethod === "TRANSFER"
+        ? "TRANSFER BANK"
+        : "TUNAI LOKET";
       const itemDateStr = itemTx?.date
         ? new Date(itemTx.date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
         : dateStr.split(" pukul ")[0];
@@ -706,23 +871,28 @@ export default function PaymentsPage() {
     const cleanPhone = phone.replace(/[^0-9]/g, "");
     const targetPhone = cleanPhone.startsWith("0") ? `62${cleanPhone.slice(1)}` : cleanPhone;
     
-    const periodStr = receiptData.invoiceType === "SPP" 
+    const finalAmount = receiptData.paidAmount ?? receiptData.amount ?? 0;
+    const methodInfo = getPaymentMethodDetails(receiptData.paymentMethod, receiptData.midtransOrderId);
+    const methodStr = methodInfo.methodLabel;
+    const periodStr = receiptData.invoiceType === "SPP" || receiptData.invoiceType === "FULLDAY"
       ? `Bulan ${MONTHS.find(m => m.value === receiptData.month)?.name} ${receiptData.year}`
-      : `${getInvoiceTypeName(receiptData.invoiceType)} ${receiptData.year}`;
+      : `${getInvoiceTypeName(receiptData.invoiceType)} Tahun ${receiptData.year}`;
       
     const message = `*KWITANSI BUKTI PEMBAYARAN RESMI*\n` +
       `*SIKUAT - Yayasan Al Uswah Terpadu*\n\n` +
       `Terima kasih, pembayaran SPP/Sekolah putra/putri Anda telah *BERHASIL* dicatat di Kasir Loket.\n\n` +
       `*Rincian Transaksi:*\n` +
-      `- *No. Invoice:* #INV-${receiptData.id}\n` +
+      `- *No. Kwitansi:* #KW-${receiptData.year || 2026}-${receiptData.id || receiptData.invoiceId || "-"}\n` +
       `- *Nama Siswa:* ${foundStudent.name}\n` +
       `- *NIS:* ${foundStudent.studentNumber}\n` +
       `- *Unit/Kelas:* ${getUnitName(foundStudent.schoolUnitId)} - ${foundStudent.className}\n` +
       `- *Pembayaran:* ${getInvoiceTypeName(receiptData.invoiceType)} (${periodStr})\n` +
-      `- *Nominal Dibayar:* ${formatRupiah(Number(paymentAmount))}\n` +
-      `- *Status:* ${receiptData.status === "PAID" ? "LUNAS" : "TERBAYAR SEBAGIAN"}\n` +
+      `- *Nominal Dibayar:* ${formatRupiah(finalAmount)}\n` +
+      `- *Terbilang:* ${formatTerbilang(finalAmount)}\n` +
+      `- *Metode:* ${methodStr}\n` +
+      `- *Status:* ${receiptData.status === "PAID" ? "LUNAS / SAH" : "TERBAYAR SEBAGIAN"}\n` +
       `- *Tanggal:* ${new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}\n\n` +
-      `_Pesan ini dikirim otomatis oleh Sistem Informasi Keuangan SIKUAT Al Uswah Terpadu._`;
+      `_Simpan pesan ini sebagai bukti kuitansi digital sah dari SIKUAT Al Uswah Terpadu._`;
 
     return `https://wa.me/${targetPhone}?text=${encodeURIComponent(message)}`;
   };
@@ -730,14 +900,26 @@ export default function PaymentsPage() {
   return (
     <div className="space-y-6 animate-fade-in pb-12">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2">
-          <CreditCard className="w-5 h-5 text-indigo-400" />
-          Kasir Pembayaran Sekolah (Offline)
-        </h1>
-        <p className="text-xs text-slate-400 mt-1">
-          Formulir pelunasan tagihan SPP bulanan atau cicilan Uang Pengembangan siswa secara tunai di loket.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-indigo-400" />
+            Kasir Pembayaran Sekolah (Manual / Loket)
+          </h1>
+          <p className="text-xs text-slate-400 mt-1">
+            Formulir pelunasan tagihan SPP bulanan atau biaya sekolah secara tunai kasir maupun verifikasi transfer bank manual.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleSyncPakasir}
+          disabled={syncLoading}
+          className="px-3.5 py-2 bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700 text-indigo-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all shadow-sm cursor-pointer disabled:opacity-50 self-start sm:self-auto"
+          title="Sinkronkan status transaksi yang sudah berhasil di gateway Pakasir"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${syncLoading ? "animate-spin text-indigo-400" : ""}`} />
+          <span>{syncLoading ? "Menyinkronkan..." : "Sinkronkan Status Pakasir"}</span>
+        </button>
       </div>
 
       {/* Alerts */}
@@ -1011,9 +1193,40 @@ export default function PaymentsPage() {
                   )}
                 </div>
 
+                {/* Payment Method selector */}
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-slate-300">Metode Pembayaran</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setOfflinePaymentMethod("CASH")}
+                      className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                        offlinePaymentMethod === "CASH"
+                          ? "bg-indigo-600/20 border-indigo-500 text-indigo-300 shadow-sm"
+                          : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                      }`}
+                    >
+                      <span>💵 Tunai (Kasir / Cash)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOfflinePaymentMethod("TRANSFER")}
+                      className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                        offlinePaymentMethod === "TRANSFER"
+                          ? "bg-indigo-600/20 border-indigo-500 text-indigo-300 shadow-sm"
+                          : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                      }`}
+                    >
+                      <span>🏦 Transfer Bank (TF Manual)</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Amount input field */}
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-slate-300">Nominal Uang Tunai Diterima (IDR)</label>
+                  <label className="font-semibold text-slate-300">
+                    {offlinePaymentMethod === "TRANSFER" ? "Nominal Transfer Terverifikasi (IDR)" : "Nominal Uang Tunai Diterima (IDR)"}
+                  </label>
                   <input
                     type="number"
                     placeholder="Masukkan nominal bayar..."
@@ -1042,8 +1255,12 @@ export default function PaymentsPage() {
                     <>
                       <span>
                         {invoiceType === "SPP" 
-                          ? (sppInfo.status === "PAID" ? "Tagihan SPP Sudah Lunas" : "Proses Pembayaran Tunai") 
-                          : (nonSppInfo.status === "PAID" ? `${getInvoiceTypeName(invoiceType)} Sudah Lunas` : "Proses Pembayaran")}
+                          ? (sppInfo.status === "PAID" 
+                              ? "Tagihan SPP Sudah Lunas" 
+                              : offlinePaymentMethod === "TRANSFER" ? "Verifikasi & Catat Pembayaran Transfer" : "Proses Pembayaran Tunai") 
+                          : (nonSppInfo.status === "PAID" 
+                              ? `${getInvoiceTypeName(invoiceType)} Sudah Lunas` 
+                              : offlinePaymentMethod === "TRANSFER" ? "Verifikasi & Catat Transfer" : "Proses Pembayaran")}
                       </span>
                       <ArrowRight className="w-4 h-4" />
                     </>
@@ -1108,15 +1325,23 @@ export default function PaymentsPage() {
                   <span className="text-slate-300 font-mono">{formatRupiah(receiptData.amount)}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-slate-500">Metode Bayar</span>
+                  <span className="font-semibold text-indigo-300">
+                    {getPaymentMethodDetails(receiptData.paymentMethod, receiptData.midtransOrderId).badgeText}
+                  </span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-slate-500">Status Bayar</span>
                   <span className={`font-bold ${receiptData.status === "PAID" ? "text-emerald-400" : "text-amber-400"}`}>
-                    {receiptData.status === "PAID" ? "Lunas (Kasir Tunai)" : "Sebagian (Cicilan)"}
+                    {receiptData.status === "PAID" ? "Lunas" : "Sebagian (Cicilan)"}
                   </span>
                 </div>
                 
                 <div className="border-t border-slate-850 pt-3 flex justify-between items-center">
-                  <span className="text-xs font-bold text-white uppercase">Uang Tunai Diterima</span>
-                  <span className="text-base font-black text-emerald-400 font-mono">{formatRupiah(Number(paymentAmount))}</span>
+                  <span className="text-xs font-bold text-white uppercase">Nominal Diterima</span>
+                  <span className="text-base font-black text-emerald-400 font-mono">
+                    {formatRupiah(receiptData.paidAmount ?? receiptData.amount ?? 0)}
+                  </span>
                 </div>
               </div>
 
@@ -1206,42 +1431,77 @@ export default function PaymentsPage() {
                           {formatRupiah(inv.amount)}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                            inv.status === "PAID"
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                              : inv.status === "PARTIALLY_PAID"
-                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                              : "bg-red-500/10 text-red-400 border border-red-500/20"
-                          }`}>
-                            {inv.status === "PAID" ? "Lunas" : inv.status === "PARTIALLY_PAID" ? "Dicicil" : "Belum Lunas"}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              inv.status === "PAID"
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : inv.status === "PARTIALLY_PAID"
+                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                : "bg-red-500/10 text-red-400 border border-red-500/20"
+                            }`}>
+                              {inv.status === "PAID" ? "Lunas" : inv.status === "PARTIALLY_PAID" ? "Dicicil" : "Belum Lunas"}
+                            </span>
+                            {inv.status === "PAID" && (
+                              <span className="text-[9px] font-bold text-indigo-400 font-mono">
+                                {inv.midtransOrderId || (inv.transactions && inv.transactions.some(t => t.paymentMethod === "MIDTRANS"))
+                                  ? "⚡ Online (Pakasir)"
+                                  : inv.transactions && inv.transactions.some(t => t.paymentMethod === "TRANSFER")
+                                  ? "🏦 Transfer Bank"
+                                  : "💵 Tunai Kasir"}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-2">
                             {!isPaid ? (
                               <button
                                 onClick={async () => {
-                                  if (confirm(`Apakah Anda yakin ingin menandai tagihan ini sebagai LUNAS?`)) {
-                                    try {
-                                      if (inv.id) {
-                                        await api.put(`/invoices/${inv.id}/status`, { status: "PAID" });
-                                      } else {
-                                        // Virtual invoice, create by paying offline
-                                        await api.post("/invoices/pay-offline", {
-                                          studentNumber: foundStudent.studentNumber,
-                                          month: inv.month,
-                                          year: inv.year,
-                                          invoiceType: inv.invoiceType,
-                                          paymentAmount: inv.amount,
-                                        });
-                                      }
-                                      // Refresh student invoices
-                                      const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
-                                      setStudentInvoices(invResponse.data.data || []);
-                                      setSuccessMsg("Status pembayaran berhasil diubah menjadi Lunas!");
-                                    } catch (err: any) {
-                                      alert(err.response?.data?.message || "Gagal mengubah status");
+                                  const isTransfer = confirm(
+                                    `Pilih metode pembayaran untuk tagihan ini:\n- Klik [OK] untuk TRANSFER BANK (TF Manual BSI)\n- Klik [BATAL / CANCEL] untuk TUNAI KASIR (Cash)`
+                                  );
+                                  const method = isTransfer ? "TRANSFER" : "CASH";
+                                  try {
+                                    let savedId = inv.id;
+                                    let paidAmt = inv.amount;
+                                    if (inv.id) {
+                                      const res = await api.put(`/invoices/${inv.id}/status`, { status: "PAID", paymentMethod: method });
+                                      if (res.data?.data?.id) savedId = res.data.data.id;
+                                      if (res.data?.data?.amount) paidAmt = res.data.data.amount;
+                                    } else {
+                                      // Virtual invoice, create by paying offline
+                                      const res = await api.post("/invoices/pay-offline", {
+                                        studentNumber: foundStudent.studentNumber,
+                                        month: inv.month,
+                                        year: inv.year,
+                                        invoiceType: inv.invoiceType,
+                                        paymentAmount: inv.amount,
+                                        paymentMethod: method,
+                                      });
+                                      const rawData = res.data?.data?.invoice || res.data?.data || {};
+                                      savedId = rawData.id || rawData.invoiceId;
+                                      if (rawData.amount || rawData.amountPaid) paidAmt = rawData.amount || rawData.amountPaid;
                                     }
+                                    
+                                    const invData = {
+                                      id: savedId || Date.now(),
+                                      invoiceType: inv.invoiceType,
+                                      month: inv.month,
+                                      year: inv.year,
+                                      amount: paidAmt,
+                                      paidAmount: paidAmt,
+                                      paymentMethod: method,
+                                      status: "PAID",
+                                    };
+                                    setReceiptData(invData);
+                                    setShowReceiptModal(true);
+
+                                    // Refresh student invoices
+                                    const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
+                                    setStudentInvoices(invResponse.data.data || []);
+                                    setSuccessMsg(`Status tagihan berhasil diubah menjadi Lunas via ${method === "TRANSFER" ? "Transfer Bank" : "Tunai"}! Nota kwitansi resmi telah dibuka.`);
+                                  } catch (err: any) {
+                                    alert(err.response?.data?.message || "Gagal mengubah status");
                                   }
                                 }}
                                 className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
@@ -1251,11 +1511,18 @@ export default function PaymentsPage() {
                             ) : (
                               <>
                                 <button
-                                  onClick={() => openPrintSelectionModal(inv)}
-                                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer flex items-center gap-1 inline-flex"
-                                  title="Pilih dan cetak kwitansi A4"
+                                  onClick={() => openReceiptModalForInvoice(inv)}
+                                  className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer flex items-center gap-1 inline-flex"
+                                  title="Buka Nota Kwitansi Resmi Digital"
                                 >
-                                  <Printer className="w-3 h-3" /> Kwitansi
+                                  <Receipt className="w-3 h-3" /> Nota
+                                </button>
+                                <button
+                                  onClick={() => openPrintSelectionModal(inv)}
+                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer flex items-center gap-1 inline-flex border border-slate-700"
+                                  title="Pilih dan cetak kwitansi A4 (4-in-1)"
+                                >
+                                  <Printer className="w-3 h-3" /> Cetak A4
                                 </button>
                                 <button
                                   onClick={async () => {
@@ -1264,15 +1531,17 @@ export default function PaymentsPage() {
                                         await api.put(`/invoices/${inv.id}/status`, { status: "PENDING" });
                                         const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
                                         setStudentInvoices(invResponse.data.data || []);
+                                        setReceiptData(null);
+                                        setShowReceiptModal(false);
                                         setSuccessMsg("Status pembayaran berhasil diubah menjadi Belum Lunas!");
                                       } catch (err: any) {
                                         alert(err.response?.data?.message || "Gagal mengubah status");
                                       }
                                     }
                                   }}
-                                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
+                                  className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
                                 >
-                                  Set Belum Lunas
+                                  Reset
                                 </button>
                                 <button
                                   onClick={async () => {
@@ -1281,15 +1550,17 @@ export default function PaymentsPage() {
                                         await api.delete(`/invoices/${inv.id}`);
                                         const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
                                         setStudentInvoices(invResponse.data.data || []);
+                                        setReceiptData(null);
+                                        setShowReceiptModal(false);
                                         setSuccessMsg("Data tagihan berhasil dihapus sepenuhnya!");
                                       } catch (err: any) {
                                         alert(err.response?.data?.message || "Gagal menghapus tagihan");
                                       }
                                     }
                                   }}
-                                  className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
+                                  className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
                                 >
-                                  Hapus Tagihan
+                                  Hapus
                                 </button>
                               </>
                             )}
@@ -1348,7 +1619,7 @@ export default function PaymentsPage() {
                     {receiptData.status === "PAID" ? "LUNAS / SAH" : "TERBAYAR SEBAGIAN"}
                   </span>
                   <p className="text-[10px] font-mono text-slate-300 font-bold mt-1">
-                    No. Kwitansi: #KW-2026-{receiptData.id || receiptData.invoiceId || "-"}
+                    No. Kwitansi: #KW-{receiptData.year || 2026}-{receiptData.id || receiptData.invoiceId || "-"}
                   </p>
                 </div>
               </div>
@@ -1388,9 +1659,17 @@ export default function PaymentsPage() {
                   <span className="col-span-4 text-slate-400 font-semibold">Guna Pembayaran</span>
                   <span className="col-span-1 text-slate-500">:</span>
                   <span className="col-span-7 font-bold text-emerald-400">
-                    {receiptData.invoiceType === "SPP" 
-                      ? `Pembayaran SPP Bulanan - ${MONTHS.find(m => m.value === receiptData.month)?.name} ${receiptData.year}`
-                      : `Cicilan Uang Pengembangan ${receiptData.year}`}
+                    {receiptData.invoiceType === "SPP" || receiptData.invoiceType === "FULLDAY"
+                      ? `Pembayaran ${getInvoiceTypeName(receiptData.invoiceType)} - ${MONTHS.find(m => m.value === receiptData.month)?.name} ${receiptData.year}`
+                      : `Pembayaran ${getInvoiceTypeName(receiptData.invoiceType)} Tahun ${receiptData.year}`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-12 gap-2">
+                  <span className="col-span-4 text-slate-400 font-semibold">Metode Pembayaran</span>
+                  <span className="col-span-1 text-slate-500">:</span>
+                  <span className="col-span-7 font-bold text-indigo-400">
+                    {getPaymentMethodDetails(receiptData.paymentMethod, receiptData.midtransOrderId).methodLabel}
                   </span>
                 </div>
 
@@ -1398,67 +1677,88 @@ export default function PaymentsPage() {
                   <span className="col-span-4 text-slate-400 font-semibold">Terbilang</span>
                   <span className="col-span-1 text-slate-500">:</span>
                   <span className="col-span-7 italic font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                    {formatTerbilang(Number(paymentAmount))}
+                    {formatTerbilang(Number(receiptData.paidAmount ?? receiptData.amount ?? 0))}
                   </span>
                 </div>
               </div>
 
-              {/* Banner Total Jumlah Rp */}
-              <div className="bg-gradient-to-r from-emerald-950/60 via-emerald-900/30 to-slate-950 border-2 border-emerald-500/40 p-4 rounded-xl flex items-center justify-between print-border-box">
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Jumlah Nominal Tunai Diterima
-                  </p>
-                  <p className="text-[10px] text-emerald-400 font-semibold mt-0.5">
-                    Metode: Tunai / Pembayaran Loket Offline
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="text-2xl font-black text-emerald-400 font-mono tracking-tight">
-                    {formatRupiah(Number(paymentAmount))}
-                  </span>
-                </div>
-              </div>
+              {/* Banner Total Jumlah Rp & Tanda Tangan */}
+              {(() => {
+                const methodInfo = getPaymentMethodDetails(receiptData.paymentMethod, receiptData.midtransOrderId);
+                return (
+                  <>
+                    <div className="bg-gradient-to-r from-emerald-950/60 via-emerald-900/30 to-slate-950 border-2 border-emerald-500/40 p-4 rounded-xl flex items-center justify-between print-border-box">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          {methodInfo.amountTitle}
+                        </p>
+                        <p className="text-[10px] text-emerald-400 font-semibold mt-0.5">
+                          Metode: {methodInfo.methodLabel}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-2xl font-black text-emerald-400 font-mono tracking-tight">
+                          {formatRupiah(Number(receiptData.paidAmount ?? receiptData.amount ?? 0))}
+                        </span>
+                      </div>
+                    </div>
 
-              {/* Tanda Tangan & Stempel Legalisasi */}
-              <div className="pt-4 border-t border-slate-800 grid grid-cols-2 gap-4 items-end text-[11px]">
-                <div className="space-y-1 text-[10px] text-slate-500">
-                  <p className="italic">Catatan:</p>
-                  <p className="text-slate-400">• Simpan kuitansi ini sebagai bukti pembayaran tunai sah.</p>
-                  <p className="text-slate-400">• Kuitansi ini dicetak secara digital oleh SIKUAT Al Uswah Terpadu.</p>
-                </div>
+                    <div className="pt-4 border-t border-slate-800 grid grid-cols-2 gap-4 items-end text-[11px]">
+                      <div className="space-y-1 text-[10px] text-slate-500">
+                        <p className="italic">Catatan:</p>
+                        <p className="text-slate-400">{methodInfo.noteText}</p>
+                        <p className="text-slate-400">• Kuitansi ini dicetak secara digital oleh SIKUAT Al Uswah Terpadu.</p>
+                      </div>
 
-                <div className="text-center space-y-3">
-                  <p className="text-[10px] text-slate-400 font-semibold">
-                    Surabaya, {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
-                  </p>
-                  <div className="inline-block border-2 border-emerald-500/50 bg-emerald-500/10 px-4 py-1.5 rounded-lg text-center shadow-inner">
-                    <p className="text-xs font-black text-emerald-400 tracking-wider">TERBAYAR LUNAS</p>
-                    <p className="text-[9px] text-slate-400 font-mono mt-0.5">KASIR SIKUAT</p>
-                  </div>
-                  <p className="text-xs font-extrabold text-white underline decoration-slate-600">
-                    {user?.name || "Admin Kasir Keuangan"}
-                  </p>
-                </div>
-              </div>
+                      <div className="text-center space-y-3">
+                        <p className="text-[10px] text-slate-400 font-semibold">
+                          Surabaya, {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                        </p>
+                        <div className="inline-block border-2 border-emerald-500/50 bg-emerald-500/10 px-4 py-1.5 rounded-lg text-center shadow-inner">
+                          <p className="text-xs font-black text-emerald-400 tracking-wider">TERBAYAR LUNAS</p>
+                          <p className="text-[9px] text-slate-400 font-mono mt-0.5">
+                            {methodInfo.type === "MIDTRANS" ? "GATEWAY PAKASIR" : "KASIR SIKUAT"}
+                          </p>
+                        </div>
+                        <p className="text-xs font-extrabold text-white underline decoration-slate-600">
+                          {methodInfo.type === "MIDTRANS" ? "Sistem Gateway Online (Terverifikasi)" : (user?.name || "Super Admin Yayasan")}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
             </div>
 
             {/* Modal Bottom Buttons */}
-            <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center gap-3 no-print">
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center gap-2.5 no-print">
               <button
-                onClick={handlePrintReceipt}
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer text-xs"
+                onClick={handlePrintSingleReceipt}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer text-xs"
+                title="Cetak lembar kuitansi ini langsung"
               >
-                <Printer className="w-4 h-4" /> Cetak Kwitansi Nota
+                <Printer className="w-4 h-4" /> Cetak Kwitansi Ini
+              </button>
+              <button
+                onClick={() => {
+                  const targetInv = studentInvoices.find(
+                    (i) => i.invoiceType === receiptData.invoiceType && i.month === receiptData.month && i.year === receiptData.year
+                  );
+                  openPrintSelectionModal(targetInv);
+                }}
+                className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white font-bold rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer text-xs"
+                title="Cetak format gabungan 4 kwitansi per lembar A4"
+              >
+                <Printer className="w-4 h-4" /> Format A4 (4-in-1)
               </button>
               <a
                 href={getWhatsAppReceiptLink()}
                 target="_blank"
                 rel="noreferrer"
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer text-xs"
+                className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer text-xs"
               >
-                <MessageCircle className="w-4 h-4" /> Kirim Bukti via WA
+                <MessageCircle className="w-4 h-4" /> WA Ortu
               </a>
               <button
                 onClick={() => setShowReceiptModal(false)}

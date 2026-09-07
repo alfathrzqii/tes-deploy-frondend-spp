@@ -24,8 +24,13 @@ import {
   QrCode,
   Building2,
   CreditCard,
-  ArrowRight
+  ArrowRight,
+  RefreshCw,
+  Layers,
+  Zap,
+  Printer,
 } from "lucide-react";
+import { printOfficialReceipt } from "@/lib/receiptPrinter";
 
 interface RecentTransaction {
   id: number;
@@ -71,7 +76,7 @@ export default function DashboardPage() {
   const [childrenInvoices, setChildrenInvoices] = useState<Record<string, any>>({});
   const [loadingChildren, setLoadingChildren] = useState(false);
 
-  // Midtrans Snap Modal States for Parent
+  // Midtrans Snap / Pakasir Modal States for Parent
   const [snapOpen, setSnapOpen] = useState(false);
   const [selectedChild, setSelectedChild] = useState<any | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
@@ -80,6 +85,11 @@ export default function DashboardPage() {
   const [copied, setCopied] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [pakasirLoading, setPakasirLoading] = useState(false);
+  const [pakasirData, setPakasirData] = useState<any | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number>(0);
+  const [syncingChild, setSyncingChild] = useState<string | null>(null);
+  const [simulatingPayment, setSimulatingPayment] = useState<boolean>(false);
 
   const isAdmin = user?.role === "SUPER_ADMIN" || user?.role === "UNIT_ADMIN";
 
@@ -151,8 +161,10 @@ export default function DashboardPage() {
         for (const child of children) {
           const invRes = await api.get(`/invoices/student/${child.studentNumber}`);
           if (invRes.data.success) {
+            const allItems = invRes.data.data || [];
             invoicesMap[child.studentNumber] = {
-              sppMonths: invRes.data.data,
+              sppMonths: allItems.filter((inv: any) => !inv.invoiceType || inv.invoiceType === "SPP"),
+              otherFees: allItems.filter((inv: any) => inv.invoiceType && inv.invoiceType !== "SPP"),
               allDbInvoices: invRes.data.allInvoices || [],
             };
           }
@@ -170,41 +182,120 @@ export default function DashboardPage() {
     loadParentDashboard();
   }, [user]);
 
+  const fetchPakasirTransaction = async (method: string, child: any, invoice: any) => {
+    if (method === "tf_manual") {
+      setPakasirData(null);
+      return;
+    }
+    setPakasirLoading(true);
+    try {
+      const response = await api.post("/invoices/pakasir/create", {
+        studentNumber: child.studentNumber,
+        paymentMethod: method,
+        invoices: [{
+          month: invoice.month,
+          year: invoice.year,
+          invoiceType: invoice.invoiceType || "SPP",
+        }],
+      });
+
+      if (response.data.success) {
+        setPakasirData(response.data.data);
+        if (method !== "qris" && response.data.data?.payment?.payment_number) {
+          setVaNumber(response.data.data.payment.payment_number);
+        }
+      } else {
+        alert(response.data.message || "Gagal membuat transaksi Pakasir");
+      }
+    } catch (err: any) {
+      console.error("Gagal memanggil API Pakasir:", err);
+    } finally {
+      setPakasirLoading(false);
+    }
+  };
+
+  const handleSelectPaymentMethod = (method: "gopay" | "va_mandiri" | "va_bca" | "qris" | "tf_manual") => {
+    setPaymentMethod(method);
+    if (selectedChild && selectedInvoice) {
+      fetchPakasirTransaction(method, selectedChild, selectedInvoice);
+    }
+  };
+
   const handleOpenSnap = (child: any, invoice: any) => {
     setSelectedChild(child);
     setSelectedInvoice(invoice);
     setSnapOpen(true);
     setPaymentSuccess(false);
     setProcessingPayment(false);
-    setVaNumber(`89022${Math.floor(1000000000 + Math.random() * 9000000000)}`);
+    setPaymentMethod("qris");
+    setVaNumber("");
+    fetchPakasirTransaction("qris", child, invoice);
   };
 
-  const handleSimulatePayment = async () => {
-    if (!selectedInvoice || !selectedChild) return;
-
-    setProcessingPayment(true);
+  const handleParentSync = async (studentNumber: string) => {
+    setSyncingChild(studentNumber);
     try {
-      const payload = {
-        studentNumber: selectedChild.studentNumber,
-        month: selectedInvoice.month,
-        year: selectedInvoice.year,
+      await api.post("/invoices/pakasir/sync", { studentNumber });
+      await loadParentDashboard();
+    } catch (err) {
+      console.error("Gagal menyinkronkan data:", err);
+    } finally {
+      setSyncingChild(null);
+    }
+  };
+
+  // Polling status Pakasir
+  useEffect(() => {
+    let intervalId: any = null;
+
+    if (snapOpen && pakasirData && !paymentSuccess && paymentMethod !== "tf_manual") {
+      const checkStatus = async () => {
+        try {
+          const response = await api.get(
+            `/invoices/pakasir/status?order_id=${pakasirData.orderId}&amount=${pakasirData.amount}`
+          );
+          if (response.data.success && response.data.status === "completed") {
+            setPaymentSuccess(true);
+            await loadParentDashboard();
+          }
+        } catch (err) {
+          console.error("Gagal polling status pembayaran:", err);
+        }
       };
 
-      const response = await api.post("/invoices/pay-online-simulated", payload);
-
-      if (response.data.success) {
-        setPaymentSuccess(true);
-        // Reload parent dashboard view
-        await loadParentDashboard();
-      } else {
-        alert(response.data.message || "Gagal memproses pembayaran");
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert(err.response?.data?.message || "Gagal memproses simulasi pembayaran");
-    } finally {
-      setProcessingPayment(false);
+      checkStatus();
+      intervalId = setInterval(checkStatus, 4000);
     }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [snapOpen, pakasirData, paymentSuccess, paymentMethod]);
+
+  // Countdown Timer Effect
+  useEffect(() => {
+    if (!snapOpen || !pakasirData?.payment?.expired_at) {
+      setSecondsLeft(0);
+      return;
+    }
+
+    const expiryTime = new Date(pakasirData.payment.expired_at).getTime();
+    const updateCountdown = () => {
+      const now = Date.now();
+      const diffSecs = Math.max(0, Math.floor((expiryTime - now) / 1000));
+      setSecondsLeft(diffSecs);
+    };
+
+    updateCountdown();
+    const timerId = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timerId);
+  }, [snapOpen, pakasirData]);
+
+  const formatCountdown = (secs: number) => {
+    const hours = Math.floor(secs / 3600);
+    const minutes = Math.floor((secs % 3600) / 60);
+    const seconds = secs % 60;
+    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
   };
 
   const getWhatsAppLink = () => {
@@ -230,10 +321,61 @@ export default function DashboardPage() {
     window.open(getWhatsAppLink(), "_blank");
   };
 
+  const handleSimulatePakasirPayment = async () => {
+    if (!pakasirData?.orderId) return;
+    setSimulatingPayment(true);
+    try {
+      const response = await api.post("/invoices/pakasir/simulate", {
+        orderId: pakasirData.orderId,
+        amount: pakasirData.amount || (selectedInvoice ? selectedInvoice.amount : 0),
+      });
+
+      if (response.data.success) {
+        setPaymentSuccess(true);
+        await loadParentDashboard();
+      } else {
+        alert(response.data.message || "Gagal memicu simulasi pembayaran");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.message || "Gagal memicu simulasi pembayaran");
+    } finally {
+      setSimulatingPayment(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handlePrintSuccessReceipt = () => {
+    if (!selectedInvoice || !selectedChild) return;
+    const isSpp = !selectedInvoice.invoiceType || selectedInvoice.invoiceType === "SPP";
+    const periodName = isSpp
+      ? `SPP Bulanan - ${MONTHS.find((m) => m.value === selectedInvoice.month)?.name} ${selectedInvoice.year}`
+      : `${selectedInvoice.invoiceType} - Tahun ${selectedInvoice.year}`;
+
+    const methodLabel = paymentMethod === "tf_manual"
+      ? "Transfer Manual (BSI)"
+      : paymentMethod === "qris"
+      ? "QRIS (Pakasir Gateway)"
+      : `${paymentMethod.replace("_", " ").toUpperCase()} (Pakasir Gateway)`;
+
+    const unitName = selectedChild.schoolUnit?.name || "Al Uswah";
+    const className = selectedChild.className || "-";
+
+    printOfficialReceipt({
+      receiptNo: `KW-${selectedInvoice.year || 2026}-${selectedInvoice.id || selectedChild.studentNumber}`,
+      payerName: user?.name || selectedChild.parent?.name || "Wali Murid",
+      studentName: selectedChild.name,
+      studentNis: selectedChild.studentNumber,
+      unitAndClass: `Unit ${unitName} • Kelas ${className}`,
+      paymentFor: periodName,
+      paymentMethod: methodLabel,
+      amount: Number(selectedInvoice.amount || 0),
+    });
   };
 
   const getGreeting = () => {
@@ -633,11 +775,22 @@ export default function DashboardPage() {
                         </p>
                       </div>
                       
-                      {child.discountAmount > 0 && (
-                        <span className="px-2.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/15 text-[10px] font-bold self-start sm:self-auto">
-                          Potongan SPP: {formatRupiah(child.discountAmount)}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        {child.discountAmount > 0 && (
+                          <span className="px-2.5 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/15 text-[10px] font-bold">
+                            Potongan SPP: {formatRupiah(child.discountAmount)}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => handleParentSync(child.studentNumber)}
+                          disabled={syncingChild === child.studentNumber}
+                          className="px-2.5 py-1 bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700 text-indigo-300 hover:text-white rounded-lg text-[10px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                          title="Perbarui status pembayaran terbaru dari sistem"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${syncingChild === child.studentNumber ? "animate-spin text-indigo-400" : ""}`} />
+                          <span>{syncingChild === child.studentNumber ? "Menyinkronkan..." : "Sinkronkan Status"}</span>
+                        </button>
+                      </div>
                     </div>
 
                     {/* SPP 12 Months Grid */}
@@ -703,6 +856,67 @@ export default function DashboardPage() {
                         })}
                       </div>
                     </div>
+
+                    {/* Other Fees (Fullday, Seragam, Ekstrakurikuler, dll.) */}
+                    {childData?.otherFees && childData.otherFees.length > 0 && (
+                      <div className="space-y-3">
+                        <h4 className="text-xs font-bold text-slate-350 flex items-center gap-1.5">
+                          <Layers className="w-4 h-4 text-indigo-400" />
+                          Tagihan Biaya Pendidikan Lainnya
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {childData.otherFees.map((fee: any) => {
+                            const isFeePaid = fee.status === "PAID";
+                            let typeLabel = fee.invoiceType;
+                            if (fee.invoiceType === "FULLDAY") {
+                              const monthName = MONTHS.find((m) => m.value === fee.month)?.name || fee.month;
+                              typeLabel = `Biaya Fullday (${monthName} ${fee.year})`;
+                            } else if (fee.invoiceType === "DAFTAR_ULANG") {
+                              typeLabel = `Daftar Ulang (${fee.year})`;
+                            } else if (fee.invoiceType === "SERAGAM") {
+                              typeLabel = `Uang Seragam`;
+                            } else if (fee.invoiceType === "UANG_PERALATAN") {
+                              typeLabel = `Uang Peralatan`;
+                            } else if (fee.invoiceType === "EKSTRAKURIKULER") {
+                              typeLabel = `Uang Ekstrakurikuler`;
+                            }
+
+                            return (
+                              <div
+                                key={`${fee.invoiceType}-${fee.month}-${fee.year}`}
+                                className={`p-3.5 rounded-xl border flex flex-col justify-between min-h-[90px] transition-all ${
+                                  isFeePaid
+                                    ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400"
+                                    : "bg-slate-950/60 border-slate-800 text-slate-300"
+                                }`}
+                              >
+                                <div className="flex justify-between items-start gap-2">
+                                  <div>
+                                    <p className="text-xs font-bold text-white">{typeLabel}</p>
+                                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">{formatRupiah(fee.amount)}</p>
+                                  </div>
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
+                                    isFeePaid 
+                                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                                      : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                  }`}>
+                                    {isFeePaid ? "Lunas" : "Belum Bayar"}
+                                  </span>
+                                </div>
+                                {!isFeePaid && (
+                                  <button
+                                    onClick={() => handleOpenSnap(child, fee)}
+                                    className="mt-3 w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-[10px] transition-all shadow shadow-indigo-600/20 cursor-pointer text-center"
+                                  >
+                                    Bayar Sekarang
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Development Fund installment status */}
                     <div className="bg-slate-950/40 border border-slate-850 p-4 rounded-xl space-y-4">
@@ -821,24 +1035,59 @@ export default function DashboardPage() {
             {paymentSuccess ? (
               /* Success screen */
               <div className="p-8 flex flex-col items-center justify-center text-center animate-fade-in">
-                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-650 border-2 border-emerald-400 mb-6">
+                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-650 border-2 border-emerald-400 mb-4">
                   <Check className="w-7 h-7 stroke-[3]" />
                 </div>
                 <h4 className="font-extrabold text-lg text-slate-900">Pembayaran Berhasil!</h4>
-                <p className="text-[11px] text-slate-505 mt-2 max-w-xs leading-normal">
+                <p className="text-[11px] text-slate-505 mt-1.5 max-w-xs leading-normal">
                   Pembayaran SPP bulan {MONTHS.find((m) => m.value === selectedInvoice.month)?.name} {selectedInvoice.year} untuk <b>{selectedChild.name}</b> telah sukses terverifikasi.
                 </p>
 
-                <div className="w-full bg-slate-50 rounded-xl p-4 my-5 text-left border border-slate-100 space-y-2 text-[10px]">
+                {/* Banner Pesan: Cetak Kwitansi atau Screenshot */}
+                <div className="w-full bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 rounded-xl p-3.5 mt-4 mb-2 text-left flex items-start gap-3 shadow-sm">
+                  <div className="p-2 bg-amber-100 text-amber-800 rounded-lg shrink-0 mt-0.5">
+                    <Printer className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                      <h5 className="font-extrabold text-amber-950 text-xs">
+                        Penting: Simpan Bukti Pembayaran
+                      </h5>
+                    </div>
+                    <p className="text-[11px] text-amber-900/90 leading-relaxed font-medium">
+                      Silakan <strong>cetak kwitansi</strong> atau <strong>screenshot halaman ini</strong> sebagai bukti pembayaran sah Anda.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Detail Ringkasan Transaksi */}
+                <div className="w-full bg-slate-50 rounded-xl p-4 my-2 text-left border border-slate-100 space-y-2 text-[10px]">
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Order ID</span>
+                    <span className="text-slate-400">Order ID / Ref</span>
                     <span className="font-mono font-medium text-slate-700">
-                      {selectedInvoice.midtransOrderId || "MOCK-MIDTRANS"}
+                      {selectedInvoice.midtransOrderId || pakasirData?.orderId || "MOCK-MIDTRANS"}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Nama Siswa</span>
-                    <span className="font-medium text-slate-700">{selectedChild.name}</span>
+                    <span className="text-slate-400">Nama Siswa / NIS</span>
+                    <span className="font-medium text-slate-700">
+                      {selectedChild.name} ({selectedChild.studentNumber})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Unit & Kelas</span>
+                    <span className="font-medium text-slate-700">
+                      Unit {selectedChild.schoolUnit?.name || "Al Uswah"} • Kelas {selectedChild.className || "-"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Tagihan</span>
+                    <span className="font-medium text-slate-700">
+                      {!selectedInvoice.invoiceType || selectedInvoice.invoiceType === "SPP"
+                        ? `SPP ${MONTHS.find((m) => m.value === selectedInvoice.month)?.name} ${selectedInvoice.year}`
+                        : `${selectedInvoice.invoiceType} ${selectedInvoice.year}`}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Metode</span>
@@ -846,18 +1095,37 @@ export default function DashboardPage() {
                       {paymentMethod === "tf_manual" ? "Transfer Manual (BSI)" : paymentMethod.replace("_", " ")}
                     </span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Status</span>
+                    <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 uppercase text-[9px]">
+                      LUNAS / SAH
+                    </span>
+                  </div>
                   <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-800 text-xs">
                     <span>Jumlah Bayar</span>
-                    <span>{formatRupiah(selectedInvoice.amount)}</span>
+                    <span className="font-mono text-emerald-600 font-extrabold">{formatRupiah(selectedInvoice.amount)}</span>
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setSnapOpen(false)}
-                  className="w-full bg-slate-950 text-white font-bold py-3 rounded-xl hover:bg-slate-850 transition-all shadow-lg shadow-slate-900/10 cursor-pointer"
-                >
-                  Kembali Ke Dashboard
-                </button>
+                {/* Tombol Aksi */}
+                <div className="w-full space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={handlePrintSuccessReceipt}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-3 rounded-xl transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Cetak Kwitansi Pembayaran (PDF / Print)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSnapOpen(false)}
+                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition-all cursor-pointer"
+                  >
+                    Kembali Ke Dashboard
+                  </button>
+                </div>
               </div>
             ) : (
               /* Checkout screens */
@@ -865,14 +1133,27 @@ export default function DashboardPage() {
                 {/* Total Billing Info */}
                 <div className="bg-indigo-50/70 px-6 py-4 flex items-center justify-between border-b border-indigo-100">
                   <div className="text-[11px]">
-                    <span className="text-slate-500">Tagihan SPP</span>
+                    <span className="text-slate-500">
+                      {selectedInvoice.invoiceType && selectedInvoice.invoiceType !== "SPP" ? "Tagihan Biaya Sekolah" : "Tagihan SPP"}
+                    </span>
                     <h5 className="font-extrabold text-slate-850 text-xs mt-0.5">
-                      Bulan {MONTHS.find((m) => m.value === selectedInvoice.month)?.name} {selectedInvoice.year}
+                      {selectedInvoice.invoiceType && selectedInvoice.invoiceType !== "SPP" 
+                        ? `${selectedInvoice.invoiceType} - ${selectedInvoice.year}`
+                        : `Bulan ${MONTHS.find((m) => m.value === selectedInvoice.month)?.name} ${selectedInvoice.year}`}
                     </h5>
                   </div>
-                  <span className="font-extrabold text-indigo-700 text-base">
-                    {formatRupiah(selectedInvoice.amount)}
-                  </span>
+                  <div className="text-right">
+                    <span className="font-extrabold text-indigo-700 text-base block">
+                      {pakasirData?.payment?.total_payment 
+                        ? formatRupiah(pakasirData.payment.total_payment)
+                        : formatRupiah(selectedInvoice.amount)}
+                    </span>
+                    {pakasirData?.payment?.fee > 0 && (
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Biaya layanan: {formatRupiah(pakasirData.payment.fee)}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Main panel - Methods */}
@@ -884,7 +1165,7 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-2 gap-3">
                     {/* QRIS */}
                     <button
-                      onClick={() => setPaymentMethod("qris")}
+                      onClick={() => handleSelectPaymentMethod("qris")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "qris"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-750"
@@ -892,12 +1173,12 @@ export default function DashboardPage() {
                       }`}
                     >
                       <QrCode className="w-5 h-5" />
-                      <span className="text-[10px] font-bold">QRIS (GoPay/SPay)</span>
+                      <span className="text-[10px] font-bold">QRIS (GoPay/OVO/Shopee)</span>
                     </button>
 
                     {/* VA Mandiri */}
                     <button
-                      onClick={() => setPaymentMethod("va_mandiri")}
+                      onClick={() => handleSelectPaymentMethod("va_mandiri")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "va_mandiri"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-750"
@@ -910,7 +1191,7 @@ export default function DashboardPage() {
 
                     {/* VA BCA */}
                     <button
-                      onClick={() => setPaymentMethod("va_bca")}
+                      onClick={() => handleSelectPaymentMethod("va_bca")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "va_bca"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-750"
@@ -921,23 +1202,10 @@ export default function DashboardPage() {
                       <span className="text-[10px] font-bold">BCA VA</span>
                     </button>
 
-                    {/* ShopeePay/Wallet */}
-                    <button
-                      onClick={() => setPaymentMethod("gopay")}
-                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
-                        paymentMethod === "gopay"
-                          ? "border-indigo-600 bg-indigo-50/45 text-indigo-755"
-                          : "border-slate-100 hover:border-slate-300 text-slate-655 bg-slate-50/30"
-                      }`}
-                    >
-                      <Wallet className="w-5 h-5" />
-                      <span className="text-[10px] font-bold">GoPay Instant</span>
-                    </button>
-
                     {/* Transfer Manual BSI */}
                     <button
-                      onClick={() => setPaymentMethod("tf_manual")}
-                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer col-span-2 ${
+                      onClick={() => handleSelectPaymentMethod("tf_manual")}
+                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5 cursor-pointer ${
                         paymentMethod === "tf_manual"
                           ? "border-indigo-600 bg-indigo-50/45 text-indigo-755"
                           : "border-slate-100 hover:border-slate-300 text-slate-655 bg-slate-50/30"
@@ -951,40 +1219,131 @@ export default function DashboardPage() {
                   {/* Payment Details Container */}
                   <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
                     {paymentMethod === "qris" ? (
-                      <div className="flex flex-col items-center text-center space-y-2 py-1">
-                        <div className="p-2 bg-white border border-slate-200 rounded-lg">
-                          <QrCode className="w-24 h-24 text-slate-800" />
-                        </div>
-                        <p className="text-[9px] text-slate-555 leading-normal">
-                          Pindai kode QR simulasi di atas menggunakan e-wallet Anda.
-                        </p>
+                      <div className="flex flex-col items-center text-center space-y-2.5 py-1">
+                        {pakasirLoading ? (
+                          <div className="py-8 flex flex-col items-center justify-center gap-2">
+                            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                            <span className="text-[11px] text-slate-500 font-medium">Membuat Transaksi QRIS Pakasir...</span>
+                          </div>
+                        ) : pakasirData?.payment?.payment_number ? (
+                          <>
+                            <div className="p-2 bg-white border border-slate-200 rounded-xl shadow-sm">
+                              <img
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pakasirData.payment.payment_number)}`}
+                                alt="QRIS Pakasir"
+                                className="w-44 h-44 object-contain mx-auto"
+                              />
+                            </div>
+                            {secondsLeft > 0 && (
+                              <div className="text-[10px] text-indigo-700 font-bold bg-indigo-50 border border-indigo-200/60 px-3 py-1 rounded-full flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
+                                <span>Bayar sebelum {formatCountdown(secondsLeft)}</span>
+                              </div>
+                            )}
+                            <p className="text-[9px] text-slate-500 leading-normal max-w-xs">
+                              Pindai kode QRIS di atas dengan GoPay, OVO, Dana, ShopeePay, BCA, Mandiri, atau Mobile Banking lainnya. Status akan terverifikasi otomatis.
+                            </p>
+
+                            {/* Trigger Simulasi QRIS Terbayar untuk Testing */}
+                            <div className="w-full pt-3 border-t border-slate-200/80 mt-1 space-y-1">
+                              <button
+                                type="button"
+                                onClick={handleSimulatePakasirPayment}
+                                disabled={simulatingPayment || pakasirLoading}
+                                className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                                title="Tes Fitur: Simulasikan transaksi QRIS Pakasir ini telah dibayar sukses"
+                              >
+                                {simulatingPayment ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    <span>Memproses Simulasi Lunas...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Zap className="w-4 h-4 fill-white" />
+                                    <span>⚡ [Tes Fitur] Simulasi QRIS Terbayar (Pakasir Sukses)</span>
+                                  </>
+                                )}
+                              </button>
+                              <p className="text-[9.5px] text-slate-400 text-center">
+                                Klik tombol di atas untuk menguji alur verifikasi otomatis tanpa perlu transfer uang sungguhan.
+                              </p>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="py-6 text-slate-500 text-xs">
+                            Gagal memuat QRIS. Silakan coba klik ulang metode QRIS atau gunakan Transfer Manual BSI.
+                          </div>
+                        )}
                       </div>
                     ) : paymentMethod === "va_mandiri" || paymentMethod === "va_bca" ? (
                       <div className="space-y-2 text-xs text-slate-750">
-                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">
-                          Nomor Virtual Account
-                        </span>
-                        <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200">
-                          <span className="font-mono font-bold text-slate-800 text-xs tracking-wide">
-                            {vaNumber}
-                          </span>
-                          <button
-                            onClick={() => copyToClipboard(vaNumber)}
-                            className="text-indigo-650 hover:text-indigo-850 p-1 flex items-center gap-0.5 cursor-pointer font-bold"
-                          >
-                            {copied ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <>
-                                <Copy className="w-3 h-3" />
-                                <span>Salin</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                        <p className="text-[9px] text-slate-500 leading-normal">
-                          Gunakan kode simulasi VA di atas untuk penyelesaian transfer bank.
-                        </p>
+                        {pakasirLoading ? (
+                          <div className="py-8 flex flex-col items-center justify-center gap-2">
+                            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                            <span className="text-[11px] text-slate-500 font-medium">Membuat Virtual Account Pakasir...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex justify-between items-center">
+                              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">
+                                Nomor Virtual Account ({paymentMethod === "va_mandiri" ? "Mandiri" : "BCA"})
+                              </span>
+                              {secondsLeft > 0 && (
+                                <span className="text-[10px] text-amber-600 font-bold">
+                                  Kedaluwarsa: {formatCountdown(secondsLeft)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between bg-white px-3 py-2.5 rounded-lg border border-slate-200 shadow-sm">
+                              <span className="font-mono font-bold text-slate-800 text-sm tracking-wider">
+                                {vaNumber || pakasirData?.payment?.payment_number || "Menunggu nomor..."}
+                              </span>
+                              <button
+                                onClick={() => copyToClipboard(vaNumber || pakasirData?.payment?.payment_number || "")}
+                                className="text-indigo-650 hover:text-indigo-850 p-1 flex items-center gap-1 cursor-pointer font-bold text-xs"
+                              >
+                                {copied ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <>
+                                    <Copy className="w-3.5 h-3.5" />
+                                    <span>Salin</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                            <p className="text-[9px] text-slate-500 leading-normal">
+                              Gunakan nomor Virtual Account di atas untuk transfer melalui ATM, Mobile Banking, atau Internet Banking Anda.
+                            </p>
+
+                            {/* Trigger Simulasi VA Terbayar untuk Testing */}
+                            <div className="w-full pt-3 border-t border-slate-200/80 mt-1 space-y-1">
+                              <button
+                                type="button"
+                                onClick={handleSimulatePakasirPayment}
+                                disabled={simulatingPayment || pakasirLoading}
+                                className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                                title="Tes Fitur: Simulasikan transfer VA Pakasir ini telah dibayar sukses"
+                              >
+                                {simulatingPayment ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    <span>Memproses Simulasi Lunas...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Zap className="w-4 h-4 fill-white" />
+                                    <span>⚡ [Tes Fitur] Simulasi VA Terbayar (Pakasir Sukses)</span>
+                                  </>
+                                )}
+                              </button>
+                              <p className="text-[9.5px] text-slate-400 text-center">
+                                Klik tombol di atas untuk menguji alur verifikasi otomatis tanpa perlu transfer uang sungguhan.
+                              </p>
+                            </div>
+                          </>
+                        )}
                       </div>
                     ) : paymentMethod === "tf_manual" ? (
                       <div className="space-y-2 text-xs text-slate-750">
@@ -1023,56 +1382,35 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         <p className="text-[9px] text-slate-500 leading-normal">
-                          Silakan transfer ke rekening BSI di atas. Setelah transfer, klik tombol di bawah untuk mengirimkan bukti transfer via WhatsApp ke nomor +62 896-7833-1076.
+                          Silakan transfer ke rekening BSI di atas. Setelah transfer, klik tombol di bawah untuk mengirimkan bukti transfer via WhatsApp ke admin sekolah agar diverifikasi.
                         </p>
                       </div>
-                    ) : (
-                      <div className="text-[11px] text-slate-700 py-1 space-y-1">
-                        <p className="font-semibold text-slate-800">GoPay Instant Checkout</p>
-                        <p className="text-[9px] text-slate-555 leading-normal">
-                          Klik tombol bayar di bawah untuk simulasi integrasi satu klik GoPay.
-                        </p>
-                      </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
                 {/* Footer Pay Button */}
-                <div className="px-6 py-5 bg-slate-50 border-t border-slate-100">
+                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
                   {paymentMethod === "tf_manual" ? (
                     <button
                       onClick={handleWhatsAppRedirect}
-                      disabled={processingPayment}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 rounded-xl transition-all shadow-md shadow-emerald-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 rounded-xl transition-all shadow-md shadow-emerald-600/10 flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      {processingPayment ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin text-white" />
-                          <span>Mengirim & Mengonfirmasi...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Kirim Bukti & Konfirmasi via WhatsApp</span>
-                        </>
-                      )}
+                      <span>Kirim Bukti & Konfirmasi via WhatsApp</span>
                     </button>
                   ) : (
-                    <button
-                      onClick={handleSimulatePayment}
-                      disabled={processingPayment}
-                      className="w-full bg-indigo-600 hover:bg-indigo-755 text-white font-extrabold py-3.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-                    >
-                      {processingPayment ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin text-white" />
-                          <span>Memproses Pembayaran...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Simulasikan Bayar Lunas</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-indigo-700 text-xs font-semibold">
+                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-ping" />
+                        <span>Menunggu verifikasi pembayaran otomatis...</span>
+                      </div>
+                      <button
+                        onClick={() => setSnapOpen(false)}
+                        className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                      >
+                        Tutup
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

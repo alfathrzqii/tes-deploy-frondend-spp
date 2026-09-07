@@ -126,6 +126,23 @@ export default function InvoicesPage() {
     }
   };
 
+  const [syncLoading, setSyncLoading] = useState(false);
+
+  const handleSyncPakasir = async () => {
+    setSyncLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await api.post("/invoices/pakasir/sync");
+      setSuccessMsg(res.data.message || "Sinkronisasi transaksi Pakasir berhasil");
+      await fetchInvoices();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Gagal menyinkronkan status Pakasir");
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
   useEffect(() => {
     setPage(1);
   }, [search, status, schoolUnitId, month, year]);
@@ -135,14 +152,21 @@ export default function InvoicesPage() {
   }, [page, search, status, schoolUnitId, month, year]);
 
   const handleUpdateStatus = async (id: number, targetStatus: "PAID" | "PENDING") => {
-    const actionText = targetStatus === "PAID" ? "melunasi" : "membatalkan pelunasan";
-    if (!confirm(`Apakah Anda yakin ingin ${actionText} tagihan ini?`)) return;
+    let paymentMethod = "CASH";
+    if (targetStatus === "PAID") {
+      const isTransfer = confirm(
+        `Pilih metode pembayaran untuk melunasi tagihan ini:\n- Klik [OK] untuk TRANSFER BANK (TF Manual BSI)\n- Klik [BATAL / CANCEL] untuk TUNAI KASIR (Cash)`
+      );
+      paymentMethod = isTransfer ? "TRANSFER" : "CASH";
+    } else {
+      if (!confirm("Apakah Anda yakin ingin membatalkan pelunasan tagihan ini?")) return;
+    }
 
     setError(null);
     setSuccessMsg(null);
     try {
-      await api.put(`/invoices/${id}/status`, { status: targetStatus });
-      setSuccessMsg(`Status tagihan berhasil diubah menjadi ${targetStatus === "PAID" ? "Lunas" : "Belum Lunas"}`);
+      await api.put(`/invoices/${id}/status`, { status: targetStatus, paymentMethod });
+      setSuccessMsg(`Status tagihan berhasil diubah menjadi ${targetStatus === "PAID" ? `Lunas via ${paymentMethod === "TRANSFER" ? "Transfer Bank" : "Tunai"}` : "Belum Lunas"}`);
       fetchInvoices();
     } catch (err: any) {
       setError(err.response?.data?.message || "Gagal memperbarui status tagihan");
@@ -266,7 +290,8 @@ export default function InvoicesPage() {
       const itemTx = itemInv.transactions && itemInv.transactions.length > 0 ? itemInv.transactions[0] : null;
       const itemAmountText = formatRupiah(itemInv.amount);
       const itemTerbilang = terbilangFunc(itemInv.amount) ? terbilangFunc(itemInv.amount) + " Rupiah" : "Nol Rupiah";
-      const itemMethod = itemTx?.paymentMethod ? (itemTx.paymentMethod.toUpperCase() === "MIDTRANS" ? "QRIS" : itemTx.paymentMethod) : "CASH";
+      const isOnline = itemTx?.paymentMethod === "MIDTRANS" || (itemTx?.description && itemTx.description.toLowerCase().includes("online")) || Boolean((itemInv as any).midtransOrderId);
+      const itemMethod = isOnline ? "PORTAL ONLINE (PAKASIR)" : itemTx?.paymentMethod === "TRANSFER" ? "TRANSFER BANK" : "TUNAI LOKET";
       const itemDateStr = itemTx?.date
         ? new Date(itemTx.date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
         : "-";
@@ -557,13 +582,24 @@ export default function InvoicesPage() {
             Lihat, filter, dan kelola seluruh status pembayaran SPP/Uang Pengembangan siswa secara keseluruhan.
           </p>
         </div>
-        <button
-          onClick={fetchInvoices}
-          className="self-start sm:self-center flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors font-semibold cursor-pointer"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh</span>
-        </button>
+        <div className="self-start sm:self-center flex items-center gap-2">
+          <button
+            onClick={handleSyncPakasir}
+            disabled={syncLoading}
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600/20 border border-indigo-500/40 rounded-lg text-indigo-300 hover:text-white hover:bg-indigo-600/40 transition-colors font-semibold cursor-pointer disabled:opacity-50"
+            title="Sinkronkan status transaksi yang sudah berhasil di gateway Pakasir"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${syncLoading ? "animate-spin text-indigo-400" : ""}`} />
+            <span>{syncLoading ? "Menyinkronkan..." : "Sinkronkan Pakasir"}</span>
+          </button>
+          <button
+            onClick={fetchInvoices}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors font-semibold cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* Alerts */}

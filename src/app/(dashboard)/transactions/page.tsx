@@ -360,6 +360,23 @@ export default function TransactionsPage() {
         </div>
       )}
 
+      {/* Informational Callout for Student SPP / Tuition Fees */}
+      <div className="bg-indigo-950/30 border border-indigo-500/30 p-4 rounded-xl text-xs text-indigo-200 flex items-start gap-3">
+        <AlertCircle className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <p className="font-bold text-white text-xs">
+            Ingin mencatat pelunasan SPP bulanan atau biaya siswa (Tunai / Transfer Bank)?
+          </p>
+          <p className="text-slate-300 text-[11px] leading-relaxed">
+            Untuk pembayaran biaya siswa, silakan gunakan menu{" "}
+            <a href="/payments" className="text-indigo-400 font-bold underline hover:text-indigo-300">
+              Kasir Pembayaran Sekolah (Manual / Loket)
+            </a>
+            . Pembayaran yang diinput melalui menu tersebut otomatis melunasi tagihan siswa dan menyinkronkan status di dashboard wali murid.
+          </p>
+        </div>
+      </div>
+
       {/* 3 Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Total Income */}
