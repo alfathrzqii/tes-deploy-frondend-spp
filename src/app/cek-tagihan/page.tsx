@@ -13,6 +13,7 @@ import {
   Percent,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   CreditCard,
   X,
@@ -26,6 +27,10 @@ import {
   Download
 } from "lucide-react";
 import { printBatchReceipt } from "@/lib/receiptPrinter";
+
+// Mode Pemeliharaan (Maintenance) Layanan Payment Gateway (Pakasir: QRIS, VA BNI, BRI, CIMB)
+// Ubah ke false jika payment gateway sudah normal kembali
+const IS_PAYMENT_GATEWAY_MAINTENANCE = true;
 
 interface StudentInfo {
   id: number;
@@ -85,7 +90,9 @@ export default function CekTagihanPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [selectedInvoicesList, setSelectedInvoicesList] = useState<Invoice[]>([]);
   const [checkedKeys, setCheckedKeys] = useState<string[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"qris" | "bni_va" | "bri_va" | "cimb_niaga_va" | "tf_manual">("qris");
+  const [paymentMethod, setPaymentMethod] = useState<"qris" | "bni_va" | "bri_va" | "cimb_niaga_va" | "tf_manual">(
+    IS_PAYMENT_GATEWAY_MAINTENANCE ? "tf_manual" : "qris"
+  );
   const [vaNumber] = useState(() => `89022${Math.floor(1000000000 + Math.random() * 9000000000)}`);
   const [copied, setCopied] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
@@ -318,6 +325,7 @@ export default function CekTagihanPage() {
     setProcessingPayment(false);
     setPakasirData(null);
     setRealVaNumber("");
+    setPaymentMethod(IS_PAYMENT_GATEWAY_MAINTENANCE ? "tf_manual" : "qris");
     setCheckoutStep("SELECT_METHOD");
     setSecondsLeft(null);
     setManualExpiredAt(null);
@@ -336,17 +344,27 @@ export default function CekTagihanPage() {
     setProcessingPayment(false);
     setPakasirData(null);
     setRealVaNumber("");
+    setPaymentMethod(IS_PAYMENT_GATEWAY_MAINTENANCE ? "tf_manual" : "qris");
     setCheckoutStep("SELECT_METHOD");
     setSecondsLeft(null);
     setManualExpiredAt(null);
   };
 
   const handleSelectMethod = (method: "qris" | "bni_va" | "bri_va" | "cimb_niaga_va" | "tf_manual") => {
+    if (IS_PAYMENT_GATEWAY_MAINTENANCE && method !== "tf_manual") {
+      return;
+    }
     setPaymentMethod(method);
     setCheckoutStep("METHOD_PREVIEW");
   };
 
   const handleConfirmPayment = () => {
+    if (IS_PAYMENT_GATEWAY_MAINTENANCE && paymentMethod !== "tf_manual") {
+      alert("Layanan payment gateway sedang dalam pemeliharaan. Silakan gunakan metode Transfer Manual (BSI).");
+      setPaymentMethod("tf_manual");
+      setCheckoutStep("SELECT_METHOD");
+      return;
+    }
     setCheckoutStep("PAYMENT_DETAILS");
     if (paymentMethod === "tf_manual") {
       setManualExpiredAt(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
@@ -873,6 +891,26 @@ export default function CekTagihanPage() {
               </div>
             </div>
 
+            {/* Maintenance notice banner when payment gateway is undergoing maintenance */}
+            {IS_PAYMENT_GATEWAY_MAINTENANCE && (
+              <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl flex items-start gap-3.5 text-amber-300 shadow-sm animate-fadeIn">
+                <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl shrink-0 mt-0.5">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div className="space-y-1">
+                  <h5 className="font-bold text-amber-200 text-xs sm:text-sm flex items-center gap-2">
+                    <span>Pemeliharaan Layanan Payment Gateway Otomatis</span>
+                    <span className="text-[10px] bg-amber-500/25 text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-500/40">
+                      Maintenance
+                    </span>
+                  </h5>
+                  <p className="text-xs text-amber-300/85 leading-relaxed font-normal">
+                    Metode pembayaran otomatis via QRIS & Virtual Account untuk sementara sedang mengalami pemeliharaan sistem. Pembayaran online tetap dapat dilakukan melalui metode <strong>Transfer Manual (Rekening BSI Yayasan)</strong> atau secara langsung di loket kasir sekolah.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Invoices Grid */}
             <div>
               <div className="flex items-center justify-between mb-4">
@@ -1187,54 +1225,146 @@ export default function CekTagihanPage() {
                   <div className="px-5 py-4 space-y-4">
                     {checkoutStep === "SELECT_METHOD" ? (
                       <>
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                          Pilih Metode Pembayaran
-                        </p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                            Pilih Metode Pembayaran
+                          </p>
+                          {IS_PAYMENT_GATEWAY_MAINTENANCE && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-300/80 px-2 py-0.5 rounded-md">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" />
+                              Gateway Maintenance
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Soft alert banner for Payment Gateway Maintenance */}
+                        {IS_PAYMENT_GATEWAY_MAINTENANCE && (
+                          <div className="bg-amber-50 border border-amber-200/90 rounded-xl p-3 text-slate-800 flex items-start gap-2.5 text-xs shadow-xs animate-fadeIn">
+                            <div className="p-1.5 bg-amber-100 text-amber-700 rounded-lg shrink-0 mt-0.5">
+                              <AlertTriangle className="w-4 h-4" />
+                            </div>
+                            <div className="space-y-0.5">
+                              <span className="font-bold text-amber-950 block text-xs">
+                                Pemeliharaan Saluran Payment Gateway
+                              </span>
+                              <p className="text-[11px] text-amber-900/90 leading-relaxed font-normal">
+                                Layanan pembayaran otomatis (QRIS & Virtual Account) sedang dalam perbaikan sistem. Silakan gunakan metode <strong>Transfer Manual (BSI)</strong> di bawah ini untuk menyelesaikan pembayaran.
+                              </p>
+                            </div>
+                          </div>
+                        )}
 
                         <div className="grid grid-cols-2 gap-2">
                           {/* QRIS */}
                           <button
+                            type="button"
+                            disabled={IS_PAYMENT_GATEWAY_MAINTENANCE}
                             onClick={() => handleSelectMethod("qris")}
-                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 transition-all gap-1 cursor-pointer"
+                            className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all gap-1 relative overflow-hidden ${
+                              IS_PAYMENT_GATEWAY_MAINTENANCE
+                                ? "border-slate-200/80 bg-slate-100/70 text-slate-400 cursor-not-allowed opacity-60"
+                                : "border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 cursor-pointer"
+                            }`}
                           >
-                            <QrCode className="w-4.5 h-4.5 text-indigo-600" />
-                            <span className="text-[11px] font-bold text-slate-800">QRIS (GoPay/SPay)</span>
+                            <QrCode className={`w-4.5 h-4.5 ${IS_PAYMENT_GATEWAY_MAINTENANCE ? "text-slate-400" : "text-indigo-600"}`} />
+                            <span className={`text-[11px] font-bold ${IS_PAYMENT_GATEWAY_MAINTENANCE ? "text-slate-400" : "text-slate-800"}`}>
+                              QRIS (GoPay/SPay)
+                            </span>
+                            {IS_PAYMENT_GATEWAY_MAINTENANCE && (
+                              <span className="text-[8px] font-bold text-amber-700 bg-amber-100/90 px-1.5 py-0.2 rounded border border-amber-200/80">
+                                Maintenance
+                              </span>
+                            )}
                           </button>
 
                           {/* BNI VA */}
                           <button
+                            type="button"
+                            disabled={IS_PAYMENT_GATEWAY_MAINTENANCE}
                             onClick={() => handleSelectMethod("bni_va")}
-                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 transition-all gap-1 cursor-pointer"
+                            className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all gap-1 relative overflow-hidden ${
+                              IS_PAYMENT_GATEWAY_MAINTENANCE
+                                ? "border-slate-200/80 bg-slate-100/70 text-slate-400 cursor-not-allowed opacity-60"
+                                : "border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 cursor-pointer"
+                            }`}
                           >
-                            <Building2 className="w-4.5 h-4.5 text-indigo-600" />
-                            <span className="text-[11px] font-bold text-slate-800">BNI VA</span>
+                            <Building2 className={`w-4.5 h-4.5 ${IS_PAYMENT_GATEWAY_MAINTENANCE ? "text-slate-400" : "text-indigo-600"}`} />
+                            <span className={`text-[11px] font-bold ${IS_PAYMENT_GATEWAY_MAINTENANCE ? "text-slate-400" : "text-slate-800"}`}>
+                              BNI VA
+                            </span>
+                            {IS_PAYMENT_GATEWAY_MAINTENANCE && (
+                              <span className="text-[8px] font-bold text-amber-700 bg-amber-100/90 px-1.5 py-0.2 rounded border border-amber-200/80">
+                                Maintenance
+                              </span>
+                            )}
                           </button>
 
                           {/* BRI VA */}
                           <button
+                            type="button"
+                            disabled={IS_PAYMENT_GATEWAY_MAINTENANCE}
                             onClick={() => handleSelectMethod("bri_va")}
-                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 transition-all gap-1 cursor-pointer"
+                            className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all gap-1 relative overflow-hidden ${
+                              IS_PAYMENT_GATEWAY_MAINTENANCE
+                                ? "border-slate-200/80 bg-slate-100/70 text-slate-400 cursor-not-allowed opacity-60"
+                                : "border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 cursor-pointer"
+                            }`}
                           >
-                            <Building2 className="w-4.5 h-4.5 text-indigo-600" />
-                            <span className="text-[11px] font-bold text-slate-800">BRI VA</span>
+                            <Building2 className={`w-4.5 h-4.5 ${IS_PAYMENT_GATEWAY_MAINTENANCE ? "text-slate-400" : "text-indigo-600"}`} />
+                            <span className={`text-[11px] font-bold ${IS_PAYMENT_GATEWAY_MAINTENANCE ? "text-slate-400" : "text-slate-800"}`}>
+                              BRI VA
+                            </span>
+                            {IS_PAYMENT_GATEWAY_MAINTENANCE && (
+                              <span className="text-[8px] font-bold text-amber-700 bg-amber-100/90 px-1.5 py-0.2 rounded border border-amber-200/80">
+                                Maintenance
+                              </span>
+                            )}
                           </button>
 
                           {/* CIMB VA */}
                           <button
+                            type="button"
+                            disabled={IS_PAYMENT_GATEWAY_MAINTENANCE}
                             onClick={() => handleSelectMethod("cimb_niaga_va")}
-                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 transition-all gap-1 cursor-pointer"
+                            className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all gap-1 relative overflow-hidden ${
+                              IS_PAYMENT_GATEWAY_MAINTENANCE
+                                ? "border-slate-200/80 bg-slate-100/70 text-slate-400 cursor-not-allowed opacity-60"
+                                : "border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 cursor-pointer"
+                            }`}
                           >
-                            <Building2 className="w-4.5 h-4.5 text-indigo-600" />
-                            <span className="text-[11px] font-bold text-slate-800">CIMB Niaga VA</span>
+                            <Building2 className={`w-4.5 h-4.5 ${IS_PAYMENT_GATEWAY_MAINTENANCE ? "text-slate-400" : "text-indigo-600"}`} />
+                            <span className={`text-[11px] font-bold ${IS_PAYMENT_GATEWAY_MAINTENANCE ? "text-slate-400" : "text-slate-800"}`}>
+                              CIMB Niaga VA
+                            </span>
+                            {IS_PAYMENT_GATEWAY_MAINTENANCE && (
+                              <span className="text-[8px] font-bold text-amber-700 bg-amber-100/90 px-1.5 py-0.2 rounded border border-amber-200/80">
+                                Maintenance
+                              </span>
+                            )}
                           </button>
 
                           {/* Transfer Manual BSI */}
                           <button
+                            type="button"
                             onClick={() => handleSelectMethod("tf_manual")}
-                            className="flex flex-col items-center justify-center p-2.5 rounded-xl border-2 border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30 transition-all gap-1 cursor-pointer col-span-2"
+                            className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1 cursor-pointer col-span-2 ${
+                              IS_PAYMENT_GATEWAY_MAINTENANCE
+                                ? "border-indigo-500 bg-indigo-50/60 shadow-sm hover:bg-indigo-50/80 ring-2 ring-indigo-500/10"
+                                : "border-slate-100 hover:border-slate-350 hover:bg-slate-50 text-slate-655 bg-slate-50/30"
+                            }`}
                           >
-                            <Building2 className="w-4.5 h-4.5 text-indigo-600" />
-                            <span className="text-[11px] font-bold text-slate-800">Transfer Manual (BSI)</span>
+                            <div className="flex items-center gap-1.5">
+                              <Building2 className="w-4.5 h-4.5 text-indigo-600" />
+                              <span className="text-[11px] font-bold text-slate-800">Transfer Manual (BSI)</span>
+                              {IS_PAYMENT_GATEWAY_MAINTENANCE && (
+                                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-300/80 px-1.5 py-0.5 rounded ml-1">
+                                  Tersedia & Direkomendasikan
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              Transfer langsung ke Rekening BSI Yayasan & kirim bukti via WhatsApp
+                            </span>
                           </button>
                         </div>
                       </>
