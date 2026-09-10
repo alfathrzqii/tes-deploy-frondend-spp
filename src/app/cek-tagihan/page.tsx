@@ -30,7 +30,7 @@ import { printBatchReceipt } from "@/lib/receiptPrinter";
 
 // Mode Pemeliharaan (Maintenance) Layanan Payment Gateway (Pakasir: QRIS, VA BNI, BRI, CIMB)
 // Ubah ke false jika payment gateway sudah normal kembali
-const IS_PAYMENT_GATEWAY_MAINTENANCE = true;
+const IS_PAYMENT_GATEWAY_MAINTENANCE = false;
 
 interface StudentInfo {
   id: number;
