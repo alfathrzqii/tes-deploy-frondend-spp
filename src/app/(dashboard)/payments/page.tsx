@@ -250,13 +250,22 @@ export default function PaymentsPage() {
     }
     if (!inv) return { status: "PENDING", total: 0, baseAmount: 0, discountApplied: 0, alreadyPaid: 0, remaining: 0 };
     const paid = (inv.transactions || []).reduce((sum, tx) => sum + tx.amount, 0);
+    const targetAmount = inv.amount > 0 ? inv.amount : (inv.baseAmount || 0);
+    let remaining = 0;
+    if (inv.status === "PAID") {
+      remaining = 0;
+    } else if (inv.status === "PENDING" && paid >= targetAmount) {
+      remaining = targetAmount;
+    } else {
+      remaining = Math.max(0, targetAmount - paid);
+    }
     return {
       status: inv.status,
       total: inv.amount,
       baseAmount: inv.baseAmount || inv.amount,
       discountApplied: inv.discountApplied || 0,
       alreadyPaid: paid,
-      remaining: inv.amount - paid,
+      remaining,
       invoice: inv
     };
   };
@@ -867,10 +876,22 @@ export default function PaymentsPage() {
     );
     if (!inv) return { status: "PENDING", alreadyPaid: 0, remaining: getEstimatedAmount() };
     const paid = (inv.transactions || []).reduce((sum, tx) => sum + tx.amount, 0);
+    const targetAmount = inv.amount > 0 ? inv.amount : getEstimatedAmount();
+
+    let remaining = 0;
+    if (inv.status === "PAID") {
+      remaining = 0;
+    } else if (inv.status === "PENDING" && paid >= targetAmount) {
+      // Data transaksi lama (phantom transaction) yang tersisa saat status PENDING
+      remaining = targetAmount;
+    } else {
+      remaining = Math.max(0, targetAmount - paid);
+    }
+
     return {
       status: inv.status,
       alreadyPaid: paid,
-      remaining: inv.amount - paid,
+      remaining,
       invoice: inv
     };
   };
@@ -1472,7 +1493,8 @@ export default function PaymentsPage() {
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-2">
                             {!isPaid ? (
-                              <button
+                              <>
+                                <button
                                 onClick={async () => {
                                   const isTransfer = confirm(
                                     `Pilih metode pembayaran untuk tagihan ini:\n- Klik [OK] untuk TRANSFER BANK (TF Manual BSI)\n- Klik [BATAL / CANCEL] untuk TUNAI KASIR (Cash)`
@@ -1513,18 +1535,39 @@ export default function PaymentsPage() {
                                     setReceiptData(invData);
                                     setShowReceiptModal(true);
 
-                                    // Refresh student invoices
-                                    const invResponse = await api.get(`/invoices/student/${foundStudent.studentNumber}`);
-                                    setStudentInvoices(invResponse.data.data || []);
-                                    setSuccessMsg(`Status tagihan berhasil diubah menjadi Lunas via ${method === "TRANSFER" ? "Transfer Bank" : "Tunai"}! Nota kwitansi resmi telah dibuka.`);
-                                  } catch (err: any) {
-                                    alert(err.response?.data?.message || "Gagal mengubah status");
-                                  }
-                                }}
-                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
-                              >
-                                Set Lunas
-                              </button>
+                                     // Refresh student invoices
+                                     fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
+                                     setSuccessMsg(`Status tagihan berhasil diubah menjadi Lunas via ${method === "TRANSFER" ? "Transfer Bank" : "Tunai"}! Nota kwitansi resmi telah dibuka.`);
+                                   } catch (err: any) {
+                                     alert(err.response?.data?.message || "Gagal mengubah status");
+                                   }
+                                 }}
+                                   className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
+                                 >
+                                   Set Lunas
+                                 </button>
+                                 {inv.id && (
+                                   <button
+                                     onClick={async () => {
+                                       if (confirm(`Apakah Anda yakin ingin MENGHAPUS data tagihan beserta riwayat transaksinya dari database? Tindakan ini tidak dapat dibatalkan.`)) {
+                                         try {
+                                           await api.delete(`/invoices/${inv.id}`);
+                                           fetchStudentInvoices(foundStudent.studentNumber, selectedYear);
+                                           setReceiptData(null);
+                                           setShowReceiptModal(false);
+                                           setSuccessMsg("Data tagihan berhasil dihapus sepenuhnya!");
+                                         } catch (err: any) {
+                                           alert(err.response?.data?.message || "Gagal menghapus tagihan");
+                                         }
+                                       }
+                                     }}
+                                     className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
+                                     title="Hapus data tagihan ini dari database"
+                                   >
+                                     Hapus
+                                   </button>
+                                 )}
+                              </>
                             ) : (
                               <>
                                 <button
