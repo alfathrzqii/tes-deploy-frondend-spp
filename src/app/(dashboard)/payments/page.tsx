@@ -1503,24 +1503,19 @@ export default function PaymentsPage() {
                                   try {
                                     let savedId = inv.id;
                                     let paidAmt = inv.amount;
-                                    if (inv.id) {
-                                      const res = await api.put(`/invoices/${inv.id}/status`, { status: "PAID", paymentMethod: method });
-                                      if (res.data?.data?.id) savedId = res.data.data.id;
-                                      if (res.data?.data?.amount) paidAmt = res.data.data.amount;
-                                    } else {
-                                      // Virtual invoice, create by paying offline
-                                      const res = await api.post("/invoices/pay-offline", {
-                                        studentNumber: foundStudent.studentNumber,
-                                        month: inv.month,
-                                        year: inv.year,
-                                        invoiceType: inv.invoiceType,
-                                        paymentAmount: inv.amount,
-                                        paymentMethod: method,
-                                      });
-                                      const rawData = res.data?.data?.invoice || res.data?.data || {};
-                                      savedId = rawData.id || rawData.invoiceId;
-                                      if (rawData.amount || rawData.amountPaid) paidAmt = rawData.amount || rawData.amountPaid;
-                                    }
+                                    
+                                    // Gunakan pay-offline agar kalkulasi diskon, tarif dasar, dan mutasi kasir selalu tepat
+                                    const res = await api.post("/invoices/pay-offline", {
+                                      studentNumber: foundStudent.studentNumber,
+                                      month: inv.month,
+                                      year: inv.year,
+                                      invoiceType: inv.invoiceType,
+                                      paymentAmount: inv.amount,
+                                      paymentMethod: method,
+                                    });
+                                    const rawData = res.data?.data?.invoice || res.data?.data || {};
+                                    savedId = rawData.id || rawData.invoiceId || inv.id;
+                                    if (rawData.amount || rawData.amountPaid) paidAmt = rawData.amount || rawData.amountPaid;
                                     
                                     const invData = {
                                       id: savedId || Date.now(),
