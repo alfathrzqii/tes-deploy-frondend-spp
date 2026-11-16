@@ -1,36 +1,115 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Frontend Sistem Pembayaran SPP (Al-Uswah)
 
-## Getting Started
+Frontend aplikasi manajemen dan pembayaran SPP Al-Uswah berbasis Single Page Application (SPA).
 
-First, run the development server:
+---
 
+## 🛠️ Tech Stack
+
+- **Framework / Bundler:** [React 19](https://react.dev/) + [Vite](https://vitejs.dev/)
+- **Language:** TypeScript
+- **Routing:** [React Router DOM v6](https://reactrouter.com/)
+- **Styling:** [Tailwind CSS v4](https://tailwindcss.com/)
+- **State Management:** [Zustand](https://zustand-demo.pmnd.rs/)
+- **HTTP Client:** [Axios](https://axios-http.com/)
+- **Icons:** [Lucide React](https://lucide.dev/)
+- **Utility:** [SheetJS (xlsx)](https://sheetjs.com/) untuk export Excel
+
+---
+
+## 🚀 Memulai (Getting Started)
+
+### 1. Prasyarat
+- Node.js (disarankan v18+ atau v20+)
+- npm, pnpm, atau yarn
+
+### 2. Instalasi Dependensi
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3. Konfigurasi Environment Variable
+Salin file `.env.example` menjadi `.env`:
+```bash
+cp .env.example .env
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Sesuaikan URL backend pada file `.env`:
+```env
+# URL API Backend SPP (Local atau Production/Render)
+VITE_API_URL="http://localhost:3003/api"
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Menjalankan Server Development
+```bash
+npm run dev
+```
 
-## Learn More
+Aplikasi akan berjalan di:
+👉 **[http://localhost:3001](http://localhost:3001)**
 
-To learn more about Next.js, take a look at the following resources:
+*(Vite dikonfigurasi melakukan proxy request `/api` ke backend lokal di port `3003`)*.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 📜 Skrip yang Tersedia
 
-## Deploy on Vercel
+| Perintah | Deskripsi |
+| :--- | :--- |
+| `npm run dev` | Menjalankan Vite dev server di port 3001 |
+| `npm run build` | Menjalankan type-check (`tsc`) dan build production ke folder `dist` |
+| `npm run preview` | Menjalankan preview dari hasil build lokal |
+| `npm run lint` | Menjalankan linter ESLint |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📁 Struktur Direktori
+
+```text
+spp-frontend/
+├── public/                 # Aset statis
+├── src/
+│   ├── app/                # Komponen halaman & layout
+│   │   ├── (dashboard)/    # Halaman dashboard (terlindungi)
+│   │   │   ├── layout.tsx  # Layout sidebar & header dashboard
+│   │   │   ├── dashboard/  # Statistik utama
+│   │   │   ├── students/   # Data siswa
+│   │   │   ├── payments/   # Entri pembayaran SPP
+│   │   │   ├── invoices/   # Tagihan SPP
+│   │   │   ├── unpaid/     # Daftar tunggakan
+│   │   │   ├── class-recap/# Rekapitulasi per kelas
+│   │   │   ├── spp-tariffs/# Tarif SPP
+│   │   │   ├── categories/ # Kategori tarif
+│   │   │   ├── transactions/# Riwayat transaksi
+│   │   │   ├── users/      # Manajemen akun user
+│   │   │   └── activity-logs/# Log aktivitas
+│   │   ├── login/          # Halaman login
+│   │   └── cek-tagihan/    # Halaman cek tagihan publik
+│   ├── components/         # Komponen reusable (RouteGuard, ThemeToggle, dll)
+│   ├── lib/                # Konfigurasi axios (api.ts), helper & constants
+│   ├── store/              # Zustand store (useAuthStore.ts)
+│   ├── App.tsx             # Konfigurasi Router (React Router DOM)
+│   └── main.tsx            # Entry point aplikasi
+├── vite.config.ts          # Konfigurasi Vite & API Proxy
+└── vercel.json             # Konfigurasi routing rewrite untuk deployment Vercel
+```
+
+---
+
+## 🌐 Deployment (Vercel)
+
+Aplikasi telah dikonfigurasi untuk deployment SPA di Vercel menggunakan file [`vercel.json`](./vercel.json) agar client-side routing (React Router) berjalan normal:
+```json
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+```
+Untuk build command di Vercel:
+- **Build Command:** `npm run build`
+- **Output Directory:** `dist`
+- **Environment Variables:** Tambahkan `VITE_API_URL` sesuai alamat backend produksi Anda.
